@@ -1,0 +1,13 @@
+\ Model Ectogrid_topology_copy
+\ LP format - for model browsing. Use MPS format to capture full model detail.
+Minimize
+ 
+Subject To
+ R24070: mass_flow_balancing[2,6549] = -1.182698274222488
+ R74421: - 1000 balancing_unit[2] - mass_flow_balancing[2,6549] <= 0
+ R78844: balancing_unit[2] = 0
+Bounds
+ mass_flow_balancing[2,6549] free
+Binaries
+ balancing_unit[2]
+End
