@@ -19,7 +19,7 @@ obj_1 = "tac"          # First objective function
 obj_2 = "co2_gross"    # Second objective function
 
 # Number of pareto points for each objective function in epsilon constraint procedure
-pareto_points = 0
+pareto_points = 4
 
 # Create result directory
 dir_results = str(os.path.dirname(os.path.realpath(__file__))) + "\\Results\\" + str(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + "_multi-objective__" + obj_1 + "__" + obj_2)
@@ -84,8 +84,8 @@ opt_res = run_optim(obj_1, "", "", str(dir_results + "\\single_objective_" + obj
 #    # Calculate pareto points
 #    for eps in range(len(eps_constr)):
 #        all_sol.append(run_optim(obj_min, obj_eps, eps_constr[eps], str(dir_results + "\\pareto_" + str(len(all_sol)-1))))
-
-print("Multi-objective optimization finished.")
+#
+#print("Multi-objective optimization finished.")
 
 #%% POST PROCESSING
 import post_processing_run

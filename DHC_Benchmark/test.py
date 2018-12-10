@@ -8,6 +8,14 @@ import parameter as p
 import pylab as plt
 import numpy as np
 import grid as gr
+import os
+import datetime
+import time
+from optim_model import run_optim
+
+
+# Start time of procedure
+start_time_procedure = time.time()
 
 #lamb_list = np.arange(0,6)*0.02 +0.01
 #t_list = np.arange(1,5)*0.025
@@ -30,10 +38,45 @@ import grid as gr
 #plt.ylabel('Anteil Wärmeverluste Wärmebedarf')
 #
 
+tac = []
+COP = []
+dt = []
 
-p.load_params()
+devs, param, dem = p.load_params()
 
 
+#for twp in [0.01]:
+#
+#
+#
+#    
+#    dt_hp = devs["HP"]["dT_cond"]
+#    COP_hp = devs["HP"]["COP"]
+#    
+#    dt.append(dt_hp)
+#    COP.append(COP_hp)
+#    
+#    # Create result directory
+#    dir_results = str(os.path.dirname(os.path.realpath(__file__))) + "\\Results\\kk" + str(twp)
+#    
+#    
+#    
+#    
+#    # tac optimization
+#    tac_opt = run_optim("tac", "", "", str(dir_results), twp)["tac"]
+#    
+#    
+#    tac.append(tac_opt)
+#    
+#    
+#
+#
+##plt.plot(dt, COP)
+##plt.plot(dt,tac)
+#    
+#b = COP
+    
+#plt.show()
 
 
 

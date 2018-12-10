@@ -167,7 +167,7 @@ def generateJson():
     with open("network.json", "w") as f: json.dump(data_dict, f, indent=4, sort_keys=True)
     
     graph = get_graph(data_dict)
-    plot_grid(graph)
+    #plot_grid(graph)
     
     return data_dict, graph
     
@@ -446,7 +446,7 @@ def design_pump(data, param, dem_buildings):
         pump_caps[typ] = cap
         param["pump_cap_"+typ] = cap
         
-    print(pump_caps)
+#    print(pump_caps)
         
         
     return param

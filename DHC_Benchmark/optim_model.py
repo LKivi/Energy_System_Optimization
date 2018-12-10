@@ -85,6 +85,21 @@ def run_optim(obj_fn, obj_eps, eps_constr, dir_results):
         for t in time_steps:
             cool[device][t] = model.addVar(vtype="C", name="cool_" + device + "_t" + str(t))
             
+    if param["switch_transient_hp"]:
+        dt_hp = {}
+        ratio = {}
+        for t in time_steps:
+            dt_hp[t] = model.addVar(vtype="C", name="dt_hp_t" + str(t))
+        for t in time_steps:
+            ratio[t] = model.addVar(vtype="C", name="COP_ratio_HP" + str(t))
+            
+        lin_HP = {}
+        for i in range(len(devs["HP"]["dt_h_i"])):
+            lin_HP[i] = {}
+            for t in time_steps:
+                lin_HP[i][t] = model.addVar(vtype="C", name="lin_HP_i" + str(i) + "_" + str(t))
+    
+        
     # storage variables
 #    ch = {}  # Energy flow to charge storage device
 #    dch = {} # Energy flow to discharge storage device
@@ -184,12 +199,14 @@ def run_optim(obj_fn, obj_eps, eps_constr, dir_results):
             model.addConstr(cool[device][t] <= cap[device])
             
         for device in ["HP"]:
-            model.addConstr(heat[device][t] <= devs["HP"]["dT_cond"]/(param["T_heating_supply"][t] - param["T_heating_return"]) * dem["heat"][t])      # maximum HP heating
+            if not param["switch_transient_hp"]:
+                model.addConstr(heat[device][t] <= devs["HP"]["dT_cond"]/(param["T_heating_supply"][t] - param["T_heating_return"]) * dem["heat"][t])      # maximum HP heating
+            else:
+                 model.addConstr( heat["HP"][t] == dem["heat"][t]/(param["T_heating_supply"][t] - param["T_heating_return"]) * dt_hp[t])           
             model.addConstr(cool[device][t] <= devs["HP"]["dT_evap"]/(param["T_cooling_return"] - param["T_cooling_supply"]) * dem["cool"][t])         # maximum HP cooling
             
         # limitation of power from and to grid   
-        model.addConstr(sum(gas[device][t] for device in ["BOI", "CHP"]) <= grid_limit_gas)
-        
+        model.addConstr(sum(gas[device][t] for device in ["BOI", "CHP"]) <= grid_limit_gas)       
         for device in ["from_grid", "to_grid"]:
             model.addConstr(power[device][t] <= grid_limit_el)
             
@@ -207,17 +224,35 @@ def run_optim(obj_fn, obj_eps, eps_constr, dir_results):
         model.addConstr(gas["CHP"][t] == heat["CHP"][t] / devs["CHP"]["eta_th"])
         
         # Compression chiller
-        model.addConstr(cool["CC"][t] == power["CC"][t] * devs["CC"]["COP"])  
+        model.addConstr(cool["CC"][t] == power["CC"][t] * devs["CC"]["COP"][t])  
 
         # Absorption chiller
         model.addConstr(cool["AC"][t] == heat["AC"][t] * devs["AC"]["eta_th"])
         
         # Heat Pump
-        model.addConstr(heat["HP"][t] == power["HP"][t] * devs["HP"]["COP"])        # COP relation
         model.addConstr(heat["HP"][t] == power["HP"][t] + cool["HP"][t])            # Heat pump energy balance
         
+        if not param["switch_transient_hp"]:
+            model.addConstr(heat["HP"][t] == power["HP"][t] * devs["HP"]["COP"])        # COP relation
+        else:
+            model.addConstr(ratio[t] == sum(lin_HP[i][t] * devs["HP"]["ratio_i"][i] for i in range(len(devs["HP"]["dt_h_i"])))) 
+            model.addConstr( power["HP"][t] == dem["heat"][t]/(param["T_heating_supply"][t] - param["T_heating_return"]) * ratio[t])
+       
         
         
+   
+    #%% dt_HP
+    if param["switch_transient_hp"]:
+        for t in time_steps:
+            model.addConstr(dt_hp[t] == sum(lin_HP[i][t] * devs["HP"]["dt_h_i"][i] for i in range(len(devs["HP"]["dt_h_i"]))))
+            # lin: Special Ordered Sets of type 2 (SOS2 or S2): an ordered set of non-negative variables, of which at most two can be non-zero, and if 
+            # two are non-zero these must be consecutive in their ordering. 
+            model.addSOS(gp.GRB.SOS_TYPE2, [lin_HP[i][t] for i in range(len(devs["HP"]["dt_h_i"]))])
+                
+            # Sum of linear function variables should be 1
+            model.addConstr(1 == sum(lin_HP[i][t] for i in range(len(devs["HP"]["dt_h_i"])))) 
+            
+            model.addConstr(dt_hp[t] <= param["T_heating_supply"][t] - param["T_heating_return"])
 
 
     #%% GLOBAL ENERGY BALANCES
@@ -368,6 +403,7 @@ def run_optim(obj_fn, obj_eps, eps_constr, dir_results):
         print('Optimization result: No feasible solution found.')
     
     else:
+        
         # Save results
         save_results(devs, param, dem, model, obj_fn, obj_eps, eps_constr, dir_results)
         
@@ -383,11 +419,12 @@ def save_results(devs, param, dem, model, obj_fn, obj_eps, eps_constr, dir_resul
     param["T_heating_supply"] = param["T_heating_supply"].tolist()
     param["diameters"]["heating"] = param["diameters"]["heating"].tolist()
     param["diameters"]["cooling"] = param["diameters"]["cooling"].tolist()
+    devs["CC"]["COP"] = devs["CC"]["COP"].tolist()
     
     # Write model parameter in json-file
-    all_param = {**param, **devs}
-    with open(dir_results + "\parameter.json", "w") as outfile:
-        json.dump(all_param, outfile, indent=4, sort_keys=True)
+#    all_param = {**param, **devs}
+#    with open(dir_results + "\parameter.json", "w") as outfile:
+#        json.dump(all_param, outfile, indent=4, sort_keys=True)
 
     # Write Gurobi files
     model.write(dir_results + "\model.lp")

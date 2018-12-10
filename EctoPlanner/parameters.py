@@ -47,7 +47,8 @@ def load_params(use_case, path_file):
                             "name": names[index],
                             "heat": np.loadtxt(open(path_demands + names[index] + "_heating.txt", "rb"),delimiter = ",", usecols=(0)),    # kW, heat demand
                             "cool": np.loadtxt(open(path_demands + names[index] + "_cooling.txt", "rb"),delimiter = ",", usecols=(0)),    # kW, cooling demand 
-                            
+                            "T_heat": 40,                           # °C, effective temperature needed for heating
+                            "T_cool": 20,                           # °C, effective temperature needed for cooling
 #                            "x": random.random()*100,
 #                            "y": random.random()*100
                             }
@@ -72,11 +73,8 @@ def load_params(use_case, path_file):
              
              "price_el": 0.14506,           # kEUR/MWh,     electricity price
              "price_cap_el": 59.660,        # kEUR/(MW*a)   capacity charge for electricity grid usage
-             "self_charge": 0.0272,         # kEUR/MWh      charge on on-site consumption of CHP-generated power   
              
-             "revenue_feed_in": 0.0557,        # kEUR/MWh,     feed-in revenue for CHP-gernerated power (excluding funding)
-             "CHP_funding": 0.01529,           # kEUR/MWh,     CHP-funding
-             "limit_CHP_fund": 1,              # MW,           maximum CHP electrical power to obtain funding
+             "revenue_feed_in": 0.06442,    # kEUR/MWh,     feed-in revenue for CHP-gernerated power (excluding funding)
              
              "gas_CO2_emission": 0.2,       # t_CO2/MWh,    specific CO2 emissions (natural gas)
              "grid_CO2_emission": 0.503,    # t_CO2/MWh,    specific CO2 emissions (grid)
@@ -84,23 +82,23 @@ def load_params(use_case, path_file):
              "MIPGap":      1e-5,           # ---,          MIP gap            
              
              "number_of_balancing_units": 1,
-             "n_neighbours": 3,             # ---,          number of closest neighbors each node is allowed to connect with
-             "n_clusters_x": 3,             # ---,          number of node clusters in x-direction
-             "n_clusters_y": 2,             # ---,          number of node clusters in y-direction
              
-             "price_cool": 1000,            # kEUR/MWh,     price for cooling power from the district cooling grid
-             "price_heat": 1000,            # kEUR/MWh,     price for heating power from the district heating grid
-             "costs_piping": 1,             # EUR/m,        costs for earth work and pipe materia per meter pipe installation
-             "use_eh_in_bldgs": 0,          # ---,          should electric heaters be used in buildings?
-             "op_hours_el_heater": 1000,    # h,            hours in which the eletric heater is operated
+#             "n_neighbours": 3,             # ---,          number of closest neighbors each node is allowed to connect with
+#             "n_clusters_x": 3,             # ---,          number of node clusters in x-direction
+#             "n_clusters_y": 2,             # ---,          number of node clusters in y-direction
+#             
+#             "price_cool": 1000,            # kEUR/MWh,     price for cooling power from the district cooling grid
+#             "price_heat": 1000,            # kEUR/MWh,     price for heating power from the district heating grid
+             "use_eh_in_bldgs": 1,          # ---,          should electric heaters be used in buildings?
+             "op_hours_el_heater": 0,    # h,            hours in which the eletric heater is operated
              "eta_th_eh": 0.98,             # ---,          thermal efficiency for electric heaters in buildings
-             "obj_weight_tac": 0.9,         # ---,          weight for objective function, co2 emission is then 1-obj_weight_tac
-             "feasible_TES": 1,             # ---,          are thermal energy storages feasible for BU?
-             "feasible_BAT": 1,             # ---,          are batteries feasible for BU?
-             "feasible_CTES": 1,            # ---,          are cold thermal energy storages feasible for BU?
+             "obj_weight_tac": 1,         # ---,            weight for objective function, co2 emission is then 1-obj_weight_tac
+             "feasible_TES": 0,             # ---,          are thermal energy storages feasible for BU?
+             "feasible_BAT": 0,             # ---,          are batteries feasible for BU?
+             "feasible_CTES": 0,            # ---,          are cold thermal energy storages feasible for BU?
              "feasible_BOI": 1,             # ---,          are gas-fired boilers feasible for BU?
-             "feasible_from_DH": 1,         # ---,          is a connection to district heating network possible?
-             "feasible_from_DC": 1,         # ---,          is a connection to district cooling network possible?
+             "feasible_from_DH": 0,         # ---,          is a connection to district heating network possible?
+             "feasible_from_DC": 0,         # ---,          is a connection to district cooling network possible?
              "feasible_CHP": 1,             # ---,          are CHP units feasible for BU?
              "feasible_EH": 1,              # ---,          are electric heater feasible for BU?
              "feasible_CC": 1,              # ---,          are compression chiller feasible for BU?
@@ -112,8 +110,8 @@ def load_params(use_case, path_file):
                   "epsilon_soil": 0.9,          #---,       soil surface emissivity
                   "evaprate_soil": 0.7,         #---,       soil surface evaporation rate
                   "lambda_soil": 1.9,           # W/(m*K),  soil heat conductivity
-                  "heatcap_soil": 2.4e6}        # J/(m^3*K),soil volumetric heat capacity 
-    
+                  "heatcap_soil": 2.4e6,        # J/(m^3*K),soil volumetric heat capacity 
+                  }
     param.update(param_soil)
     
     
@@ -126,25 +124,24 @@ def load_params(use_case, path_file):
                      "lambda_asph": 0.7,         # W/(m*K),  asphalt heat conductivity
                      "heatcap_asph": 1950400}    # J/(m^3*K),asphalt volumetric heat capacity
     
-    param.update(param_asphalt)  
+    param.update(param_asphalt)   
       
     
     #%% PIPE PARAMETERS
-    param_pipe = {"grid_depth": 1.5,                # m,       installation depth beneath surface
-                  "lambda_PE": 0.5,                 # W(m*K),  PE heat conductivity
-                  "f_fric": 0.025,                  # ---,     pipe friction factor
-                  "dp_pipe": 150,                   # Pa/m,    nominal pipe pressure gradient (for network without heat losses)
-                  "c_f": 4180,                      # J/(kg*K),fluid specific heat capacity
-                  "rho_f": 1000,                    # kg/m^3,  fluid density
-                  "t_soil": 0.6}                    # m,       thickness of soil layer around the pipe to calculate heat transfer into ground
+    param_pipe = {"grid_depth": 1,                  # m,        installation depth beneath surface
+                  "lambda_PE": 0.4,                 # W(m*K),   PE heat conductivity
+                  "f_fric": 0.025,                  # ---,      pipe friction factor
+                  "dp_pipe": 150,                   # Pa/m,     nominal pipe pressure gradient
+                  "c_f": 4180,                      # J/(kg*K), fluid specific heat capacity
+                  "rho_f": 1000,                    # kg/m^3,   fluid density
+                  "t_soil": 0.6}                    # m,        thickness of soil layer around the pipe to calculate heat transfer into ground
                   
     param.update(param_pipe)  
     
-    param_pipe_eco = {"inv_earth_work": 200,                 # EUR/m,           preparation costs for pipe installation
-                       "inv_pipe_var_per_length": 0.18452,   # EUR/(cm^2*m),    diameter price for PE pipe per metre
-                       "inv_pipe_fix_per_length": 0,
-                       "pipe_lifetime": 50,                  # a,        pipe life time
-                       "cost_om_pipe": 0.01,                 #---,       pipe operation and maintetance costs
+    param_pipe_eco = {"inv_earth_work": 250,                # EUR/m,           preparation costs for pipe installation
+                       "inv_pipe_PE": 0.114671,              # EUR/(m^2*m),     diameter price for PE pipe without insulation                     
+                       "pipe_lifetime": 30,                 # a,               pipe life time (VDI 2067)
+                       "cost_om_pipe": 0.005                 #---,             pipe operation and maintetance costs as share of investment (VDI 2067)
                        }
                 
     param.update(param_pipe_eco)
@@ -155,13 +152,14 @@ def load_params(use_case, path_file):
     #%% TEMPERATURES
     param_temperatures = {"T_hot": 20,      # °C,   hot pipe temperature
                           "T_cold": 12,     # °C,   cold pipe temperature
+                          "dT_min": 0,
                           }
     
     param.update(param_temperatures)
      
     
-    param["COP_HP"] = 5
-    param["COP_CC"] = 4
+    param["COP_HP"] = 6
+    param["COP_CC"] = 6
     
     #%% LOAD DEVICE PARAMETER
     
@@ -212,7 +210,7 @@ def load_params(use_case, path_file):
     
     #%% ABSORPTION CHILLER
     devs["AC"] = {
-                  "eta_th": 0.68,       # ---,        nominal thermal efficiency (cooling power / heating power) at FZ Jülich
+                  "eta_th": 0.68,       # ---,        nominal thermal efficiency (cooling power / heating power)
                   "life_time": 18,      # a,          operation time (VDI 2067)
                   "cost_om": 0.03,      # ---,        annual operation and maintenance costs as share of investment (VDI 2067)
                   }
@@ -224,17 +222,25 @@ def load_params(use_case, path_file):
                                }
     
     devs["AC"]["inv_i"] = {     0: 0,           # kEUR
-                                1: 135.5,       # kEUR
-                                2: 313.672,     # kEUR
-                                3: 619.333      # kEUR
+                                1: 135.9,       # kEUR
+                                2: 366.3,     # kEUR
+                                3: 802        # kEUR
                                 } 
 
     #%% COMPRESSION CHILLER
     devs["CC"] = {
-                  "COP": 4,             # ---,             nominal coefficient of performance
                   "life_time": 15,      # a,               operation time (VDI 2067)
                   "cost_om": 0.035,     # ---,             annual operation and maintenance costs as share of investment (VDI 2067)
+                  "dT_cond": 5,
+                  "dT_evap": param["T_hot"] - param["T_cold"],
+                  "dT_min_cooler": 10,
+                  "dT_pinch": 2,
+                  "eta_compr": 0.75,     # ---,            isentropic efficiency of compression
+                  "heatloss_compr": 0.1,  # ---,           heat loss rate of compression 
+                  "COP_max": 6
                   }
+    
+    devs["CC"]["COP"] = calc_COP(devs, param, "CC", devs["CC"]["dT_cond"])
     
     
     devs["CC"]["cap_i"] = { 0: 0,       # MW_th
@@ -243,47 +249,57 @@ def load_params(use_case, path_file):
                             }
     
     
-    devs["CC"]["inv_i"] = { 0: 0,         # kEUR
-                            1: 94.95,     # kEUR
-                            2: 402.4      # kEUR
+    devs["CC"]["inv_i"] = { 0: 0,      # kEUR
+                            1: 95,     # kEUR
+                            2: 501     # kEUR
                             } 
     
     #%% (HEAT) THERMAL ENERGY STORAGE
-    devs["TES"] = {
-                   "switch_TES": 0,     # toggle availability of thermal storage
-                   "max_cap": 250,      # MWh_th,          maximum thermal storage capacity
-                   "min_cap": 0,        # MWh_th,           minimum thermal storage capacity              
-                   "sto_loss": 0.005,   # 1/h,              standby losses over one time step
-                   "eta_ch": 0.975,     # ---,              charging efficiency
-                   "eta_dch": 0.975,    # ---,              discharging efficiency
-                   "max_ch": 1000,      # MW,               maximum charging power
-                   "max_dch": 1000,     # MW,               maximum discharging power
-                   "soc_init": 0.8,     # ---,              maximum initial state of charge
-                   "soc_max": 1,        # ---,              maximum state of charge
-                   "soc_min": 0,        # ---,              minimum state of charge
-                   "life_time": 20,     # a,                operation time (VDI 2067 Trinkwasserspeicher)
-                   "cost_om": 0.02,     # ---,              annual operation and maintenance costs as share of investment (VDI 2067 Trinkwasserspeicher)
-
-                   }
-    
-    devs["TES"]["cap_i"] =   { 0: 0,         # MWh_th,      depends on temperature difference! Q = V * c_p * rho * dT
-                               1: 8.128,     # MWh_th
-                               2: 40.639,    # MWh_th
-                               3: 243.833    # MWh_th
-                               }
-    
-    devs["TES"]["inv_i"] = {    0: 0,              # kEUR
-                                1: 147.2,          # kEUR,    includes factor of 1.15 for pressure correction factor due to high temperatures; higher pressure is needed to prevent evaporation
-                                2: 410.55,         # kEUR
-                                3: 1083.3          # kEUR
-                                } 
+#    devs["TES"] = {
+#                   "switch_TES": 0,     # toggle availability of thermal storage
+#                   "max_cap": 250,      # MWh_th,          maximum thermal storage capacity
+#                   "min_cap": 0,        # MWh_th,           minimum thermal storage capacity              
+#                   "sto_loss": 0.005,   # 1/h,              standby losses over one time step
+#                   "eta_ch": 0.975,     # ---,              charging efficiency
+#                   "eta_dch": 0.975,    # ---,              discharging efficiency
+#                   "max_ch": 1000,      # MW,               maximum charging power
+#                   "max_dch": 1000,     # MW,               maximum discharging power
+#                   "soc_init": 0.8,     # ---,              maximum initial state of charge
+#                   "soc_max": 1,        # ---,              maximum state of charge
+#                   "soc_min": 0,        # ---,              minimum state of charge
+#                   "life_time": 20,     # a,                operation time (VDI 2067 Trinkwasserspeicher)
+#                   "cost_om": 0.02,     # ---,              annual operation and maintenance costs as share of investment (VDI 2067 Trinkwasserspeicher)
+#
+#                   }
+#    
+#    devs["TES"]["cap_i"] =   { 0: 0,         # MWh_th,      depends on temperature difference! Q = V * c_p * rho * dT
+#                               1: 8.128,     # MWh_th
+#                               2: 40.639,    # MWh_th
+#                               3: 243.833    # MWh_th
+#                               }
+#    
+#    devs["TES"]["inv_i"] = {    0: 0,              # kEUR
+#                                1: 147.2,          # kEUR,    includes factor of 1.15 for pressure correction factor due to high temperatures; higher pressure is needed to prevent evaporation
+#                                2: 410.55,         # kEUR
+#                                3: 1083.3          # kEUR
+#                                } 
     
     #%% ELECTRICAL HEATER
-    devs["EH"] = {"inv_var": 78,        # kEUR/MW_th,       variable investment
+    # PARAMETER PRÜFEN
+    devs["EH"] = {
                   "eta_th": 0.9,        # ---,              thermal efficiency
                   "life_time": 20,      # a,                operation time
                   "cost_om": 0.01,      # ---,              annual operation and maintenance costs as share of investment
                   }
+    
+    devs["EH"]["cap_i"] = { 0: 0,       # MW_th
+                            1: 5,     # MW_th
+                            }
+    
+    
+    devs["EH"]["inv_i"] = { 0: 0,         # kEUR
+                            1: 390,       # kEUR
+                            } 
     
     #%% HEAT PUMP
     
@@ -341,41 +357,38 @@ def load_params(use_case, path_file):
 
     return nodes, param, devs, time_steps
 
-def get_grid_temp_hot_pipe(mode, time_steps):
-    if mode == "two_point_control":
-        grid_temp_hot_pipe = np.zeros(len(time_steps))
-        grid_temp_summer = 16
-        grid_temp_winter = 22
-        grid_temp_hot_pipe[0:3754] = grid_temp_winter
-        grid_temp_hot_pipe[3754:7040] = grid_temp_summer
-        grid_temp_hot_pipe[7040:8760] = grid_temp_winter
-        
-        with open("D:\\mwi\\Gurobi_Modelle\EctoPlanner\\temp.txt", "w") as outfile:
-            for t in time_steps:
-                outfile.write(str(round(grid_temp_hot_pipe[t],3)) + "\n")   
-        
-    return grid_temp_hot_pipe
+#def get_grid_temp_hot_pipe(mode, time_steps):
+#    if mode == "two_point_control":
+#        grid_temp_hot_pipe = np.zeros(len(time_steps))
+#        grid_temp_summer = 16
+#        grid_temp_winter = 22
+#        grid_temp_hot_pipe[0:3754] = grid_temp_winter
+#        grid_temp_hot_pipe[3754:7040] = grid_temp_summer
+#        grid_temp_hot_pipe[7040:8760] = grid_temp_winter
+#        
+#        with open("D:\\mwi\\Gurobi_Modelle\EctoPlanner\\temp.txt", "w") as outfile:
+#            for t in time_steps:
+#                outfile.write(str(round(grid_temp_hot_pipe[t],3)) + "\n")   
+#        
+#    return grid_temp_hot_pipe
 
 #%%
-def calc_pipe_costs(nodes, edges, edge_dict_rev, param):
-    """
-    Calculate variable and fix costs for every edge.
-    """
-    c_fix = {}
-    c_var = {}
-    for e in edges:
-        x1, y1 = nodes[edge_dict_rev[e][0]]["x"], nodes[edge_dict_rev[e][0]]["y"]
-        x2, y2 = nodes[edge_dict_rev[e][1]]["x"], nodes[edge_dict_rev[e][1]]["y"]
-        length = math.sqrt((x1-x2)**2 + (y1-y2)**2)
-        c_fix[e] = (param["inv_earth_work"] + param["inv_pipe_fix_per_length"]) * length
-        c_var[e] = param["inv_pipe_var_per_length"] * length
-        
-    
-#    print("Mindestkapazitaet vorsehen fuer Rohre")
-    
-    param["inv_pipe_fix"] = c_fix
-    param["inv_pipe_var"] = c_var
-    return param
+#def calc_pipe_costs(nodes, edges, edge_dict_rev, param):
+#    """
+#    Calculate variable and fix costs for every edge.
+#    """
+#    c_fix = {}
+#    c_var = {}
+#    for e in edges:
+#        x1, y1 = nodes[edge_dict_rev[e][0]]["x"], nodes[edge_dict_rev[e][0]]["y"]
+#        x2, y2 = nodes[edge_dict_rev[e][1]]["x"], nodes[edge_dict_rev[e][1]]["y"]
+#        length = math.sqrt((x1-x2)**2 + (y1-y2)**2)
+#        c_fix[e] = param["inv_earth_work"] * length
+#        c_var[e] = param["inv_pipe_PE"] * length
+#    
+#    param["inv_pipe_fix"] = c_fix
+#    param["inv_pipe_var"] = c_var
+#    return param
 
 
 #%%
@@ -419,103 +432,103 @@ def transform_coordinates(nodes):
 
 
 #%%
-    # get list of banned edges; each node is only allowed to connect with its closest neighbour
-def ban_edges(param, nodes, compl_graph, edge_dict, edge_dict_rev, edges):
-    
-    allowed_edges = []
-    
-    for node in range(len(nodes)):
-        
-        # find all edges which start or end at this node and calculate their length
-        all_edges = []
-        all_lengths = []
-        adjacent_edges = list(compl_graph.edges(node, data=False))        
-        for e in adjacent_edges:
-            if e[0] > e[1]:
-                e = (e[1], e[0])
-            edge_id = edge_dict[e]
-            
-            x1, y1 = nodes[edge_dict_rev[edge_id][0]]["x"], nodes[edge_dict_rev[edge_id][0]]["y"]
-            x2, y2 = nodes[edge_dict_rev[edge_id][1]]["x"], nodes[edge_dict_rev[edge_id][1]]["y"]
-            length = math.sqrt((x1-x2)**2 + (y1-y2)**2) 
-            all_edges.append(edge_id)
-            all_lengths.append(length)
-        
-        # collect allowed connections
-        n_allowed = param["n_neighbours"]      
-        # list of allowed connections [(length 1, edge_id 1), ... , (length n_allowed, edge_id n_allowed)]
-        allowed_zipped =  sorted(zip(all_lengths, all_edges))[:n_allowed]
-        
-        for item in allowed_zipped:
-            #check if edge is already allowed
-            already_allowed = 0
-            for edge in allowed_edges:
-                if edge == item[1]:
-                    already_allowed = 1
-            if already_allowed == 0:
-                allowed_edges.append(item[1])
-                
-    # remove allowed edges from edgeID-list to get banned edges
-    banned_edges = list(edges)
-    for edge in allowed_edges:
-        banned_edges.remove(edge)
-            
-    return allowed_edges, banned_edges
+#    # get list of banned edges; each node is only allowed to connect with its closest neighbour
+#def ban_edges(param, nodes, compl_graph, edge_dict, edge_dict_rev, edges):
+#    
+#    allowed_edges = []
+#    
+#    for node in range(len(nodes)):
+#        
+#        # find all edges which start or end at this node and calculate their length
+#        all_edges = []
+#        all_lengths = []
+#        adjacent_edges = list(compl_graph.edges(node, data=False))        
+#        for e in adjacent_edges:
+#            if e[0] > e[1]:
+#                e = (e[1], e[0])
+#            edge_id = edge_dict[e]
+#            
+#            x1, y1 = nodes[edge_dict_rev[edge_id][0]]["x"], nodes[edge_dict_rev[edge_id][0]]["y"]
+#            x2, y2 = nodes[edge_dict_rev[edge_id][1]]["x"], nodes[edge_dict_rev[edge_id][1]]["y"]
+#            length = math.sqrt((x1-x2)**2 + (y1-y2)**2) 
+#            all_edges.append(edge_id)
+#            all_lengths.append(length)
+#        
+#        # collect allowed connections
+#        n_allowed = param["n_neighbours"]      
+#        # list of allowed connections [(length 1, edge_id 1), ... , (length n_allowed, edge_id n_allowed)]
+#        allowed_zipped =  sorted(zip(all_lengths, all_edges))[:n_allowed]
+#        
+#        for item in allowed_zipped:
+#            #check if edge is already allowed
+#            already_allowed = 0
+#            for edge in allowed_edges:
+#                if edge == item[1]:
+#                    already_allowed = 1
+#            if already_allowed == 0:
+#                allowed_edges.append(item[1])
+#                
+#    # remove allowed edges from edgeID-list to get banned edges
+#    banned_edges = list(edges)
+#    for edge in allowed_edges:
+#        banned_edges.remove(edge)
+#            
+#    return allowed_edges, banned_edges
             
     
 #%% Aggregate building nodes to clusters    
-def cluster_nodes(nodes, param):
-    
-    # get length of the whole area
-    len_total_X = max(nodes[k]["x"] for k in range(len(nodes)))
-    len_total_Y = max(nodes[k]["y"] for k in range(len(nodes)))
-    
-    # cluster lengths
-    len_cluster_X = len_total_X / param["n_clusters_x"]
-    len_cluster_Y = len_total_Y / param["n_clusters_y"]
-    
-    # get cluster borders
-    dict_clusters = {}
-    for n_y in range(param["n_clusters_y"]):
-        dict_clusters[n_y] = {}
-        for n_x in range(param["n_clusters_x"]):
-            dict_clusters[n_y][n_x] = {}
-            dict_clusters[n_y][n_x]["ID"] = str(n_y) + str(n_x)
-            dict_clusters[n_y][n_x]["dy"] = [(param["n_clusters_y"]-n_y-1)*len_cluster_Y, (param["n_clusters_y"]-n_y)*len_cluster_Y]
-            dict_clusters[n_y][n_x]["dx"] = [n_x*len_cluster_X, (n_x+1)*len_cluster_X]
-     
-    # Assign nodes to clusters
-    for row in dict_clusters:
-        for col in dict_clusters[row]:
-            dict_clusters[row][col]["nodes"] = []
-            for n in nodes:
-                if dict_clusters[row][col]["dx"][0] <= nodes[n]["x"] and nodes[n]["x"] <= dict_clusters[row][col]["dx"][1] and dict_clusters[row][col]["dy"][0] <= nodes[n]["y"] and nodes[n]["y"] <= dict_clusters[row][col]["dy"][1]:
-                    dict_clusters[row][col]["nodes"].append(n)
-    
-    # find empty clusters
-    for row in dict_clusters:
-        for col in dict_clusters[row]:
-            if len(dict_clusters[row][col]["nodes"]) == 0:
-                dict_clusters[row][col]["is_empty"] = True
-            else:
-                dict_clusters[row][col]["is_empty"] = False
-    
-    # plot cluster borders and nodes
-    # vertical borders
-    for k in range(param["n_clusters_x"] + 1):
-        x = k*len_cluster_X
-        plt.plot([x,x], [0,len_total_Y], 'k--')
-    # horizontal borders
-    for k in range(param["n_clusters_y"] + 1):
-        y = k*len_cluster_Y
-        plt.plot([0,len_total_X], [y,y], 'k--')
-    # plot nodes as dots
-    for n in nodes:
-        plt.plot(nodes[n]["x"], nodes[n]["y"], 'r.')
-    
-    plt.show()
-    
-    return dict_clusters
+#def cluster_nodes(nodes, param):
+#    
+#    # get length of the whole area
+#    len_total_X = max(nodes[k]["x"] for k in range(len(nodes)))
+#    len_total_Y = max(nodes[k]["y"] for k in range(len(nodes)))
+#    
+#    # cluster lengths
+#    len_cluster_X = len_total_X / param["n_clusters_x"]
+#    len_cluster_Y = len_total_Y / param["n_clusters_y"]
+#    
+#    # get cluster borders
+#    dict_clusters = {}
+#    for n_y in range(param["n_clusters_y"]):
+#        dict_clusters[n_y] = {}
+#        for n_x in range(param["n_clusters_x"]):
+#            dict_clusters[n_y][n_x] = {}
+#            dict_clusters[n_y][n_x]["ID"] = str(n_y) + str(n_x)
+#            dict_clusters[n_y][n_x]["dy"] = [(param["n_clusters_y"]-n_y-1)*len_cluster_Y, (param["n_clusters_y"]-n_y)*len_cluster_Y]
+#            dict_clusters[n_y][n_x]["dx"] = [n_x*len_cluster_X, (n_x+1)*len_cluster_X]
+#     
+#    # Assign nodes to clusters
+#    for row in dict_clusters:
+#        for col in dict_clusters[row]:
+#            dict_clusters[row][col]["nodes"] = []
+#            for n in nodes:
+#                if dict_clusters[row][col]["dx"][0] <= nodes[n]["x"] and nodes[n]["x"] <= dict_clusters[row][col]["dx"][1] and dict_clusters[row][col]["dy"][0] <= nodes[n]["y"] and nodes[n]["y"] <= dict_clusters[row][col]["dy"][1]:
+#                    dict_clusters[row][col]["nodes"].append(n)
+#    
+#    # find empty clusters
+#    for row in dict_clusters:
+#        for col in dict_clusters[row]:
+#            if len(dict_clusters[row][col]["nodes"]) == 0:
+#                dict_clusters[row][col]["is_empty"] = True
+#            else:
+#                dict_clusters[row][col]["is_empty"] = False
+#    
+#    # plot cluster borders and nodes
+#    # vertical borders
+#    for k in range(param["n_clusters_x"] + 1):
+#        x = k*len_cluster_X
+#        plt.plot([x,x], [0,len_total_Y], 'k--')
+#    # horizontal borders
+#    for k in range(param["n_clusters_y"] + 1):
+#        y = k*len_cluster_Y
+#        plt.plot([0,len_total_X], [y,y], 'k--')
+#    # plot nodes as dots
+#    for n in nodes:
+#        plt.plot(nodes[n]["x"], nodes[n]["y"], 'r.')
+#    
+#    plt.show()
+#    
+#    return dict_clusters
 
 
 #def cluster_connections(dict_clusters, edge_dict):
@@ -602,6 +615,93 @@ def calc_annual_investment(devs, param):
             devs[device]["ann_factor"] = ( 1 + invest_replacements - res_value) * CRF 
 
     return devs
+
+
+
+
+#%% COP model for ammonia-heat pumps
+# Heat pump COP, part 2: Generalized COP estimation of heat pump processes
+# DOI: 10.18462/iir.gl.2018.1386
+    
+def calc_COP(devs, param, device, dt_h):
+    
+    # 0.6 * Carnot
+    
+#    t_h = 273.15 + param["T_heating_return"] + devs["HP"]["dT_cond"] + devs["HP"]["dT_pinch"]
+#    t_c = 273.15 + param["T_cooling_return"] - devs["HP"]["dT_evap"] - devs["HP"]["dT_pinch"]
+#    
+#    COP = 0.6 * t_h / (t_h - t_c)
+    
+    
+    
+
+    # get temperature parameters
+#    dt_h = devs[device]["dT_cond"]                  # heat sink temperature difference
+    dt_c = devs[device]["dT_evap"]                   # heat source temperature difference
+    
+    t_air = np.loadtxt(open("input_data/weather.csv", "rb"), delimiter = ",",skiprows = 1, usecols=(0))        # Air temperatur °C
+    t_h_in = t_air + devs["CC"]["dT_min_cooler"] + 273.15                                                      # cooling water inlet temperature °C
+    
+    t_c_in = param["T_hot"] + 273.15                # heat source inlet temperature
+    
+    # Modeling parameters
+    dt_pp = devs[device]["dT_pinch"]                # pinch point temperature difference
+    eta_is = devs[device]["eta_compr"]              # isentropic compression efficiency
+    f_Q = devs[device]["heatloss_compr"]            # heat loss rate during compression
+    
+    # Entropic mean temperautures
+    t_h_s = dt_h/np.log((t_h_in + dt_h)/t_h_in)
+    t_c_s = dt_c/np.log(t_c_in/(t_c_in - dt_c))
+    
+    #Lorentz-COP
+    COP_Lor = t_h_s/(t_h_s - t_c_s)
+    
+    
+    # linear model equations
+    dt_r_H = 0.2*(t_h_in + dt_h - (t_c_in - dt_c) + 2*dt_pp) + 0.2*dt_h + 0.016        # mean entropic heat difference in condenser deducting dt_pp
+    w_is = 0.0014*(t_h_in + dt_h - (t_c_in - dt_c) + 2*dt_pp) - 0.0015*dt_h + 0.039    # ratio of isentropic expansion work and isentropic compression work
+    
+    
+    # help values
+    num = 1 + (dt_r_H + dt_pp)/t_h_s
+    denom = 1 + (dt_r_H + 0.5*dt_c + 2*dt_pp)/(t_h_s - t_c_s)
+    
+    # COP
+    COP = COP_Lor * num/denom * eta_is * (1 - w_is) + 1 - eta_is - f_Q
+    
+    if device == "CC":
+        COP = COP - 1   # consider COP definition for compression chillers  (COP_CC = Q_0/P_el = (Q - P_el)/P_el = COP_HP - 1)
+    
+    # limit COP's
+    COP_max = devs[device]["COP_max"]
+    
+    if device == "CC":
+        for t in range(len(COP)):
+            if COP[t] > COP_max:
+                COP[t] = COP_max
+                
+#        plt.plot(t_air,COP,".")
+#        plt.show()
+#        
+#        plt.xlabel("Lufttemperatur °C")
+#        plt.ylabel("COP_CC")
+    
+    elif device == "HP":
+        if COP > COP_max:
+            COP = COP_max
+#        print(COP)
+    
+#        print(COP)
+    return COP
+
+
+
+
+
+
+
+
+
 
 ## CODE SNIPPETS for FZJ data
     

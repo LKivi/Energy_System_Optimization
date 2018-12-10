@@ -212,11 +212,11 @@ def calculateSoilTemperature(param):
     
     T_soil = weather["T_soil"]
     
-    print(T_soil)
+#    print(T_soil)
     
-    print(Ts_mean)
-    print(Ts_amp)
-    print(Ts_phase)
+#    print(Ts_mean)
+#    print(Ts_amp)
+#    print(Ts_phase)
     
     
     return T_soil

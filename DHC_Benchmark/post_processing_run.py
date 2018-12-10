@@ -90,7 +90,7 @@ def run_post_processing(dir_results):
                  "power_from_grid", "power_to_grid",
 #                 "power_WT", "power_PV", "heat_STC", 
                  "cool_AC", "heat_AC", "cool_CC", "power_CC", 
-                 "ch_TES", "dch_TES", "soc_TES", #"ch_CTES", "dch_CTES", "soc_CTES", "ch_BAT", "dch_BAT", "soc_BAT", 
+#                 "ch_TES", "dch_TES", "soc_TES", #"ch_CTES", "dch_CTES", "soc_CTES", "ch_BAT", "dch_BAT", "soc_BAT", 
                  ]
     
     demand_list = ["heat", "cool", "power"]

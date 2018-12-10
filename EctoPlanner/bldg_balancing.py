@@ -15,7 +15,7 @@ def calc_residuals(nodes, param, time_steps, dir_results):
         # Determine capacity of heat pump, electric heater
         if param["use_eh_in_bldgs"] == 1:
             heat_dem_sort = np.flip(np.sort(nodes[n]["heat"]),0)
-            hp_capacity = heat_dem_sort[param["op_hours_el_heater"]] #1000 hrs
+            hp_capacity = heat_dem_sort[param["op_hours_el_heater"]]  # 1000 hrs
             eh_capacity = heat_dem_sort[0] - hp_capacity
         
         elif param["use_eh_in_bldgs"] == 0:
@@ -26,9 +26,12 @@ def calc_residuals(nodes, param, time_steps, dir_results):
                  "CC": np.zeros(len(time_steps)),
                  "EH": np.zeros(len(time_steps)),
                  }
+        cooling_CC = np.zeros(len(time_steps))
         res_heat_dem = np.zeros(len(time_steps))
+
         
         for t in time_steps:
+            # Calculate power demands of electrical heater and heat pump
             if nodes[n]["heat"][t] <= hp_capacity:
                 power["HP"][t] = nodes[n]["heat"][t] / param["COP_HP"]
                 power["EH"][t] = 0
@@ -36,14 +39,21 @@ def calc_residuals(nodes, param, time_steps, dir_results):
                 power["HP"][t] = hp_capacity / param["COP_HP"]
                 power["EH"][t] = (nodes[n]["heat"][t] - hp_capacity) / param["eta_th_eh"]
                 
-            power["CC"][t] = nodes[n]["cool"][t] / param["COP_CC"]       
+            # calculate power demand of compression chiller
+            if param["T_hot"] + param["dT_min"] <= nodes[n]["T_cool"]: # if network temperature is low enough, free cooling is possible
+                cooling_CC[t] = 0
+                power["CC"][t] = 0  
+            else:
+                cooling_CC[t] = nodes[n]["cool"][t]
+                power["CC"][t] = cooling_CC[t] / param["COP_CC"]       
+                
             res_heat_dem[t] = ((nodes[n]["heat"][t] - (power["EH"][t] * param["eta_th_eh"])) - power["HP"][t]) - (power["CC"][t] + nodes[n]["cool"][t])
 
         mass_flow = res_heat_dem * 1000 / (param["c_f"] * (param["T_hot"] - param["T_cold"]))
 
         nodes[n]["hp_capacity"] = hp_capacity # kW_th
         nodes[n]["eh_capacity"] = eh_capacity # kW_th
-        nodes[n]["cc_capacity"] = np.max(nodes[n]["cool"]) # kW_th
+        nodes[n]["cc_capacity"] = np.max(cooling_CC) # kW_th
         nodes[n]["res_heat_dem"] = res_heat_dem # kW_th
         nodes[n]["mass_flow"] = mass_flow # from supply to return pipe, kg/s
 
@@ -54,5 +64,7 @@ def calc_residuals(nodes, param, time_steps, dir_results):
 #        heat_from_net_no_balancing = sum(param["COP_HP"][t] * power["HP"][t] - power["HP"][t] for t in time_steps)
 #        cool_from_net_no_balancing = sum(param["COP_CC"][t] * power["CC"][t] + power["CC"][t] for t in time_steps)
 #        sum_res_heat_dem = sum(res_heat_dem[t] for t in time_steps)
+        
+#        print("SAVE NODES AS JSON!!!")
         
     return nodes

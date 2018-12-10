@@ -21,10 +21,11 @@ import time
 path_file               = str(os.path.dirname(os.path.realpath(__file__)))
 dir_results             = path_file + "\\Results\\" + str(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
 
+if not os.path.exists(dir_results):
+    os.makedirs(dir_results)
+
 
 # Choose use case
-#use_case = "simple_test"
-#use_case = "EON"
 use_case = "FZJ"
 
 
@@ -34,18 +35,21 @@ use_case = "FZJ"
 # Load parameters
 nodes, param, devs, time_steps = parameters.load_params(use_case, path_file)
 
+#param["LEC"] = 0.08    # kEUR/MWh    levelized electricity costs (equals representative CHP power generation costs)
+
 # Calculate intra-balancing (within buildings)
+#print("Hier Stromgestehungskosten für Intra-Balancing vorgeben (zB 8 ct/kWh) ; diese werden im weiteren Verlauf iterativ bestimmt")
 nodes = bldg_balancing.calc_residuals(nodes, param, time_steps, dir_results)
             
 # Optimize network topology
 #    print("Minimizing pipe costs:")
 #    design_network_topology.design_network(nodes, param, time_steps, dir_results + "\\Topology " + str(k) + "\\Ganzer_Ansatz")
 
-print("Minimizing pipe lengths:")
+#print("Minimizing pipe lengths:")
 design_network_topology_3.design_network(nodes, param, time_steps, dir_results)
 
 # Calculate inter-balancing and design balancing unit
-#design_balancing_unit.design_balancing_unit(nodes, devs, param, time_steps, dir_results)
+design_balancing_unit.design_balancing_unit(nodes, devs, param, time_steps, dir_results)
 
 
 # Post-processing

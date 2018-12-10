@@ -12,7 +12,8 @@ import optim_model
 def design_balancing_unit(nodes, devs, param, time_steps, dir_results):
 
     sum_residual_heat = sum(nodes[n]["res_heat_dem"] for n in range(len(nodes)))
-    sum_power_dem_bldgs = sum(nodes[n]["power_HP"] + nodes[n]["power_EH"] + nodes[n]["power_CC"] for n in range(len(nodes)))  
+    sum_power_dem_bldgs = sum(nodes[n]["power_HP"] + nodes[n]["power_EH"] + nodes[n]["power_CC"] for n in range(len(nodes))) 
+    
     sum_power_dem_HP = sum(nodes[n]["power_HP"] for n in range(len(nodes)))  
     sum_power_dem_EH = sum(nodes[n]["power_EH"] for n in range(len(nodes)))  
     sum_power_dem_CC = sum(nodes[n]["power_CC"] for n in range(len(nodes)))  
@@ -49,12 +50,13 @@ def design_balancing_unit(nodes, devs, param, time_steps, dir_results):
     residual["cool"] = np.zeros(8760)
     for t in time_steps:
         if sum_residual_heat[t] > 0:
-            residual["heat"][t] = sum_residual_heat[t]
+            residual["heat"][t] = sum_residual_heat[t] / 1000           # MW, total residual heat demand
         else:
-            residual["cool"][t] = (-1) * sum_residual_heat[t]
-    residual["power"] = sum_power_dem_bldgs
+            residual["cool"][t] = (-1) * sum_residual_heat[t] / 1000    # MW, total residual cooling demand
+    residual["power"] = sum_power_dem_bldgs / 1000                      # MW, total electricity demand for devices in buildings
         
     res_obj = optim_model.run_optim(devs, param, residual, time_steps, dir_results)
+    
     print(res_obj)
 
     return nodes

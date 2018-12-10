@@ -19,220 +19,151 @@ import json
 
 def design_network(nodes, param, time_steps, dir_results):
     
-#    print("HIER MUESSEN NOCH PUMPARBEITEN BERUECKSICHTIGT WERDEN in der ZielFn, sonst hat man keinen vernuenftigen Trade-Off zwischen Invest und Betrieb.")
+#   print("HIER MUESSEN NOCH PUMPARBEITEN BERUECKSICHTIGT WERDEN in der ZielFn, sonst hat man keinen vernuenftigen Trade-Off zwischen Invest und Betrieb.")
 
     start_time = time.time()
+
     
-    #%%
-    
+    # Get edge and node data
     edge_dict, edge_dict_rev, edges, compl_graph, edge_list, edge_lengths = par.get_edge_dict(len(nodes),nodes)
-    param = par.calc_pipe_costs(nodes, edges, edge_dict_rev, param)
-    node_list = range(len(nodes))   
+#    param = par.calc_pipe_costs(nodes, edges, edge_dict_rev, param)
+    node_list = range(len(nodes))     
     
-    
-    
-    
-    
-    
-    #%% STEP ONE: FIND NETWORK WITH MINIMUM TOTAL PIPE LENGTH
-       
-    dir_topo = dir_results + "\\Topology"
-    length_old = 0   # Previously calculated pipe length; initialized by 0
-    eps = 0.1
-    
-    # Generate pseudo demands
-    dem = par.generate_demands(edge_list, edge_dict, nodes)
-    time_steps = range(len(dem))
-    
-    for k in range(10):
-    
-        # Create a new model
-        model = gp.Model("Ectogrid_topology")
   
-                 
-        # Create Variables             
-        
-        x = model.addVars(edges, vtype="B", name="x")                                               # ---,   Purchase decision binary variables (1 if device is installed, 0 otherwise)
-        
-        total_length = model.addVar(vtype="C", name="total_pipe_length")                            # m,     total network length
-        
-        min_length = model.addVar(vtype="C", name="minimum_pipe_length")                            # m,     Minimum total pipe length (equals previous solution)
-        
-        m_dot = model.addVars(edges, time_steps, vtype = "C", lb = -10, name = "pseudo_massflow")   # ---,   pseudo mass flows for balancing
-        
-        
-
-        # Define objective function
-        model.update()
-        model.setObjective(total_length, gp.GRB.MINIMIZE)
-        
-        
-        # Constraints
-        
-        # Ban previous solution
-        model.addConstr(min_length == length_old)
-        model.addConstr(total_length >= min_length + eps)
-        
-        # objective
-        model.addConstr(total_length == sum(x[edge] * edge_lengths[edge] for edge in edges))
-        
-        
-        # node mass balances for pseudo load situation       
-        for node in node_list:
-            
-            edges_plus = []
-            edges_minus = []
-            
-            nodes_lower = np.arange(node)                       # nodes which have lower ID-number
-            nodes_higher = np.arange(node+1, len(node_list))    # nodes which have higher ID-number
-            
-            for node_from in nodes_lower:
-                edges_plus.append(edge_dict[(node_from, node)])
-            for node_to in nodes_higher:
-                edges_minus.append(edge_dict[(node, node_to)])
-                
-            
-            for t in time_steps:
-                model.addConstr( sum(m_dot[edge, t] for edge in edges_plus) - sum(m_dot[edge, t] for edge in edges_minus) == dem[node][t] )
-                
-        
-        # mass flow limitation
-        for edge in edges:
-            for t in time_steps:
-                model.addConstr(m_dot[edge, t] <= x[edge])
-                model.addConstr(-m_dot[edge, t] <= x[edge])
-            
-
-        model.optimize()
-        
-        # get total network length
-        print("Pipe connections calculated. Total pipe length: " + str(total_length.X) + " m.")
-        length_old = total_length.X
-        
-        # get list of placed pipes
-        pipes = []
-        for edge in edges:
-            if round(x[edge].X,0) == 1:
-                pipes.append(edge)
-        
-        
-        # save results
-        if not os.path.exists(dir_topo):
-            os.makedirs(dir_topo)
-            
-        model.write(dir_topo + "\\model.sol")
-        
-       
-        # plot graph
-        graph = nx.Graph()
-        for k in node_list:
-            graph.add_node(k, pos=(nodes[k]["x"], nodes[k]["y"]))
-        
-        ebunch = []
-        for k in range(len(edge_dict_rev)):
-            if round(x[k].X,0) == 1:
-                ebunch.append((edge_dict_rev[k][0], edge_dict_rev[k][1]))
-        
-        graph.add_edges_from(ebunch)
-        
-        # Plot pipe installation in black
-        pos = nx.get_node_attributes(graph, "pos")
-        nx.draw(graph, pos, with_labels=True, font_weight="bold")
     
-        plt.grid(True)
-        plt.axis("equal")
+    #%% STEP ONE: FIND NETWORK WITH MINIMUM TOTAL PIPE LENGTH (MINIMUM SPANNING TREE)
+  
+    dir_topo = dir_results + "\\Topology"
+    
+    # Create networkx-graph
+    weighted_graph = nx.Graph()
+    
+    nbunch = compl_graph.nodes
+    weighted_graph.add_nodes_from(nbunch)
+    
+    ebunch = compl_graph.edges()
+    ebunch_weighted = []
+    for e in ebunch:
+        ebunch_weighted.append((e[0], e[1], edge_lengths[edge_dict[e]]))
+    weighted_graph.add_weighted_edges_from(ebunch_weighted)
+    
+    
+     # find network with minimal length   
+    network = nx.minimum_spanning_tree(weighted_graph)
+     
+    network_length = sum(edge_lengths[edge_dict[e]] for e in network.edges)
+    print("Pipe connections calculated. Total network length: " + str(network_length) + " m.")
+    
+    
+    # get node positions
+    pos = {}
+    for k in node_list:
+        pos[k] = (nodes[k]["x"], nodes[k]["y"])
+   
+
+    # Plot Network
+    nx.draw(network, pos, with_labels=True, font_weight="bold")
+
+    plt.grid(True)
+    plt.axis("equal")    
+#    plt.show()   
+
+    # Save figure
+    if not os.path.exists(dir_topo):
+        os.makedirs(dir_topo)
         
-        plt.savefig(dir_topo + "\\graph_min_length.png")
+    plt.savefig(dir_topo + "\\graph_min_length.png")
+    
+    # delete plot out of cache
+    plt.clf()
         
-        plt.clf()
+
         
         
 
     #%% STEP TWO: PLACE BALANCING UNIT FOR MINIMUM PIPE MASS FLOWS   
     
-        dir_BU = dir_results + "\\BU_placement"
-        
-        # list of time_steps
-        time_steps = range(8760)
-        
-        # Create a new model
-        model = gp.Model("Ectogrid_BU_placement")
-  
-                 
-        # Create Variables             
-        
-        m_dot = model.addVars(pipes, time_steps, vtype = "C", lb = -1000, name = "pseudo_massflow")     # kg/s,     mass flow through placed pipes
-        
-        ksi = model.addVars(node_list, vtype="B", name="balancing_unit")                                # ---,      Binary decision: balancing unit installed in node
-        
-        m_bal = model.addVars(node_list, time_steps, vtype="C", lb=-1000, name="mass_flow_balancing")   # kg/s,     Mass flow from cold pipe to hot pipe through balancing unit
-        
-        cap = model.addVars(pipes, vtype = "C", name = "pipe_capacities")                               # kg/s,     pipe capacities
-        
-        sum_caps = model.addVar(vtype = "C", name = "sum_pipe_capacities")                              # kg/s,     sum of pipe capacities
-        
-
-        # Define objective function
-        model.update()
-        model.setObjective(sum_caps, gp.GRB.MINIMIZE)
-        
-        
-        # Constraints
-        
-        # objective
-        model.addConstr(sum_caps == sum(cap[p] for p in pipes))
-        
- 
-        # Node balance   
-        for node in node_list:
-            edges_minus = []
-            edges_plus = []
-            
-            nodes_lower = np.arange(node)                       # nodes which have lower ID-number
-            nodes_higher = np.arange(node+1, len(node_list))    # nodes which have higher ID-number
-            
-            for node_from in nodes_lower:
-                edge_id = edge_dict[(node_from, node)]
-                if edge_id in pipes:
-                    edges_plus.append(edge_id)
-            for node_to in nodes_higher:
-                edge_id = edge_dict[(node, node_to)]
-                if edge_id in pipes:
-                    edges_minus.append(edge_id)
-                
-            for t in time_steps:
-                model.addConstr( sum(m_dot[k,t] for k in edges_plus) - sum(m_dot[k,t] for k in edges_minus) + m_bal[node,t] == nodes[node]["mass_flow"][t] )       
-        
- 
-        # Maximum number of balancing units
-        model.addConstr(sum(ksi[node] for node in node_list) <= param["number_of_balancing_units"], "number_balancing_units")
-        
-        # Balancing power is only at balancing nodes possible
-        for node in node_list:
-            for t in time_steps:
-                model.addConstr(m_bal[node,t] <= ksi[node] * 1000)
-                model.addConstr(-m_bal[node,t] <= ksi[node] * 1000)
-                  
-            
-        # Mass flow on edge must not exceed pipe capacity   
-        for p in pipes:
-            for t in time_steps:
-                model.addConstr(m_dot[p,t] <= cap[p])
-                model.addConstr(-m_dot[p,t] <= cap[p])      
-        
-        
-        # Execute calculation           
-        model.optimize()
-        
-        if model.Status in (3,4) or model.SolCount == 0:  # "INFEASIBLE" or "INF_OR_UNBD"
-            print("No feasible solution found; none of the nodes is a suitable location for balancing the network. Optimization will restart with new pipe placement..." )
-            
-        else:
-            break
-            
-
-   
+    dir_BU = dir_results + "\\BU_placement"
     
+    # list of time_steps
+    time_steps = range(8760)
+    
+    # get network pipe ids
+    pipes = list(edge_dict[e] for e in network.edges)
+    
+    # Create a new model
+    model = gp.Model("Ectogrid_BU_placement")
+  
+             
+    # Create Variables             
+    
+    m_dot = model.addVars(pipes, time_steps, vtype = "C", lb = -1000, name = "pseudo_massflow")     # kg/s,     mass flow through placed pipes
+    
+    ksi = model.addVars(node_list, vtype="B", name="balancing_unit")                                # ---,      Binary decision: balancing unit installed in node
+    
+    m_bal = model.addVars(node_list, time_steps, vtype="C", lb=-1000, name="mass_flow_balancing")   # kg/s,     Mass flow from cold pipe to hot pipe through balancing unit
+    
+    cap = model.addVars(pipes, vtype = "C", name = "pipe_capacities")                               # kg/s,     pipe capacities
+    
+    sum_caps = model.addVar(vtype = "C", name = "sum_pipe_capacities")                              # kg/s,     sum of pipe capacities
+    
+
+    # Define objective function
+    model.update()
+    model.setObjective(sum_caps, gp.GRB.MINIMIZE)
+    
+    
+    # Constraints
+    
+    # objective
+    model.addConstr(sum_caps == sum(cap[p] for p in pipes))
+    
+ 
+    # Node balance   
+    for node in node_list:
+        edges_minus = []
+        edges_plus = []
+        
+        nodes_lower = np.arange(node)                       # nodes which have lower ID-number
+        nodes_higher = np.arange(node+1, len(node_list))    # nodes which have higher ID-number
+        
+        for node_from in nodes_lower:
+            edge_id = edge_dict[(node_from, node)]
+            if edge_id in pipes:
+                edges_plus.append(edge_id)
+        for node_to in nodes_higher:
+            edge_id = edge_dict[(node, node_to)]
+            if edge_id in pipes:
+                edges_minus.append(edge_id)
+            
+        for t in time_steps:
+            model.addConstr( sum(m_dot[k,t] for k in edges_plus) - sum(m_dot[k,t] for k in edges_minus) + m_bal[node,t] == nodes[node]["mass_flow"][t] )       
+    
+ 
+    # Maximum number of balancing units
+    model.addConstr(sum(ksi[node] for node in node_list) <= param["number_of_balancing_units"], "number_balancing_units")
+    
+    # Balancing power is only at balancing nodes possible
+    for node in node_list:
+        for t in time_steps:
+            model.addConstr(m_bal[node,t] <= ksi[node] * 1000)
+            model.addConstr(-m_bal[node,t] <= ksi[node] * 1000)
+              
+        
+    # Mass flow on edge must not exceed pipe capacity   
+    for p in pipes:
+        for t in time_steps:
+            model.addConstr(m_dot[p,t] <= cap[p])
+            model.addConstr(-m_dot[p,t] <= cap[p])      
+    
+    
+    # Execute calculation           
+    model.optimize()
+    
+    if model.Status in (3,4) or model.SolCount == 0:  # "INFEASIBLE" or "INF_OR_UNBD"
+        print("No feasible solution found; none of the nodes is a suitable location for balancing the network. Optimization will restart with new pipe placement..." )
+        print("Iteration einbauen")    
+               
     # save results
     if not os.path.exists(dir_BU):
         os.makedirs(dir_BU)
@@ -259,28 +190,33 @@ def design_network(nodes, param, time_steps, dir_results):
         
     
  
-    # Draw network and save plot
+#    # Draw network and save plot
+#    
+#    graph = nx.Graph()
+#    for k in node_list:
+#        graph.add_node(k, pos=(nodes[k]["x"], nodes[k]["y"]))
+#    
+#    ebunch = []
+#    for k in pipes:
+#        ebunch.append((edge_dict_rev[k][0], edge_dict_rev[k][1], cap[k].X))
+#    
+#    graph.add_weighted_edges_from(ebunch)
+
+
     
-    graph = nx.Graph()
-    for k in node_list:
-        graph.add_node(k, pos=(nodes[k]["x"], nodes[k]["y"]))
+#    # Plot pipe installation in black
+#    pos = nx.get_node_attributes(graph, "pos")
+#    weights = [graph[u][v]["weight"] for u,v in graph.edges()]
+##    nx.draw(graph, pos, with_labels=True, font_weight="bold", width=weights)
+        
+    # Draw graph and highlight balancing unit
     
-    ebunch = []
-    for k in pipes:
-        ebunch.append((edge_dict_rev[k][0], edge_dict_rev[k][1], cap[k].X))
-    
-    graph.add_weighted_edges_from(ebunch)
-    
-    # Plot pipe installation in black
-    pos = nx.get_node_attributes(graph, "pos")
-    weights = [graph[u][v]["weight"] for u,v in graph.edges()]
-#    nx.draw(graph, pos, with_labels=True, font_weight="bold", width=weights)
-    
-    # Highlight balancing unit
-    nx.draw_networkx_nodes(graph,pos,nodelist=[balancing_node],node_color="blue")
+    nx.draw(network, pos, with_labels=True, font_weight="bold")
+    nx.draw_networkx_nodes(network,pos,nodelist=[balancing_node],node_color="blue")
     
     plt.grid(True)
     plt.axis("equal")
+    plt.show()
     
     plt.savefig(dir_BU + "\\graph.png")
     
@@ -293,6 +229,8 @@ def design_network(nodes, param, time_steps, dir_results):
     # list of time_steps
     time_steps = range(8760)
     
+    
+    
     # Create a new model
     model = gp.Model("Ectogrid_pipe_diameters")
   
@@ -300,6 +238,8 @@ def design_network(nodes, param, time_steps, dir_results):
     # Create Variables             
     
     d_in = model.addVars(pipes, vtype = "C", name = "inner_diameters")                                  # cm,       pipe inner diameters
+    
+#    pump_caps = model.addVars(pipes, vtype = "C", name = "pump_capacities")                            # W,        pump capacities
     
     tac_network = model.addVar(vtype = "C", name = "tac_network")                                       # kEUR/a,   total annualized costs for pipe system incl. pumping
     
@@ -314,10 +254,10 @@ def design_network(nodes, param, time_steps, dir_results):
     # Constraints
     
     # pipe costs
-    model.addConstr(tac_pipes >= sum((param["inv_earth_work"] + param["inv_pipe_var_per_length"] * d_in[p] * d_in[p]) * edge_lengths[p] for p in pipes) * 1, name = "Q1")
-    model.addConstr(tac_pipes <= sum((param["inv_earth_work"] + param["inv_pipe_var_per_length"] * d_in[p] * d_in[p]) * edge_lengths[p] for p in pipes) * 1, name = "Q2")       # ADD ANNUALIZATION FACTOR HERE
+    model.addConstr(tac_pipes >= sum((param["inv_earth_work"] + param["inv_pipe_PE"] * d_in[p] * d_in[p]) * edge_lengths[p] for p in pipes) * 1, name = "Q1")
+    model.addConstr(tac_pipes <= sum((param["inv_earth_work"] + param["inv_pipe_PE"] * d_in[p] * d_in[p]) * edge_lengths[p] for p in pipes) * 1, name = "Q2")       # ADD ANNUALIZATION FACTOR HERE
     
-    # pump
+    # pump sizing
     ###################################
     
     # minimum pipe diameter due to limitation of pressure gradient
@@ -351,8 +291,114 @@ def design_network(nodes, param, time_steps, dir_results):
     print("Pipe diameters:")
     for p in pipes:
         print("Pipe " + str(edge_dict_rev[p][0]) + "-" + str(edge_dict_rev[p][1]) + ": " + str(round(d_in[p].X*10,2)) + " mm.")
+
+
+
+
+
+
         
         
+#    dir_topo = dir_results + "\\Topology"
+#    length_old = 0   # Previously calculated pipe length; initialized by 0
+#    eps = 0.1
+#    
+#    # Generate pseudo demands
+#    dem = par.generate_demands(edge_list, edge_dict, nodes)
+#    time_steps = range(len(dem))
+#    
+#    for k in range(10):
+#    
+#        # Create a new model
+#        model = gp.Model("Ectogrid_topology")
+#  
+#                 
+#        # Create Variables             
+#        
+#        x = model.addVars(edges, vtype="B", name="x")                                               # ---,   Purchase decision binary variables (1 if device is installed, 0 otherwise)
+#        
+#        total_length = model.addVar(vtype="C", name="total_pipe_length")                            # m,     total network length
+#        
+#        min_length = model.addVar(vtype="C", name="minimum_pipe_length")                            # m,     Minimum total pipe length (equals previous solution)
+#        
+#        m_dot = model.addVars(edges, time_steps, vtype = "C", lb = -10, name = "pseudo_massflow")   # ---,   pseudo mass flows for balancing
+#        
+#        
+#
+#        # Define objective function
+#        model.update()
+#        model.setObjective(total_length, gp.GRB.MINIMIZE)
+#        
+#        
+#        # Constraints
+#        
+#        # Ban previous solution
+#        model.addConstr(min_length == length_old)
+#        model.addConstr(total_length >= min_length + eps)
+#        
+#        # objective
+#        model.addConstr(total_length == sum(x[edge] * edge_lengths[edge] for edge in edges))
+#        
+#        
+#        # node mass balances for pseudo load situation       
+#        for node in node_list:
+#            
+#            edges_plus = []
+#            edges_minus = []
+#            
+#            nodes_lower = np.arange(node)                       # nodes which have lower ID-number
+#            nodes_higher = np.arange(node+1, len(node_list))    # nodes which have higher ID-number
+#            
+#            for node_from in nodes_lower:
+#                edges_plus.append(edge_dict[(node_from, node)])
+#            for node_to in nodes_higher:
+#                edges_minus.append(edge_dict[(node, node_to)])
+#                
+#            
+#            for t in time_steps:
+#                model.addConstr( sum(m_dot[edge, t] for edge in edges_plus) - sum(m_dot[edge, t] for edge in edges_minus) == dem[node][t] )
+#                
+#        
+#        # mass flow limitation
+#        for edge in edges:
+#            for t in time_steps:
+#                model.addConstr(m_dot[edge, t] <= x[edge])
+#                model.addConstr(-m_dot[edge, t] <= x[edge])
+#            
+#
+#        model.optimize()
+#        
+#        # get total network length
+#        print("Pipe connections calculated. Total pipe length: " + str(total_length.X) + " m.")
+#        length_old = total_length.X
+#        
+#        # get list of placed pipes
+#        pipes = []
+#        for edge in edges:
+#            if round(x[edge].X,0) == 1:
+#                pipes.append(edge)
+#        
+#        
+#        # save results
+#        if not os.path.exists(dir_topo):
+#            os.makedirs(dir_topo)
+#            
+#        model.write(dir_topo + "\\model.sol")
+#        
+#       
+#        # plot graph
+#        graph = nx.Graph()
+#        for k in node_list:
+#            graph.add_node(k, pos=(nodes[k]["x"], nodes[k]["y"]))
+#        
+#        ebunch = []
+#        for k in range(len(edge_dict_rev)):
+#            if round(x[k].X,0) == 1:
+#                ebunch.append((edge_dict_rev[k][0], edge_dict_rev[k][1]))
+#        
+#        graph.add_edges_from(ebunch)
+
+
         
 #        x = model.addVars(edges, vtype="B", name="x") # Purchase decision binary variables (1 if device is installed, 0 otherwise)
 #            
