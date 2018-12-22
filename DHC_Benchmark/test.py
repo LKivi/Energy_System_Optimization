@@ -38,31 +38,35 @@ start_time_procedure = time.time()
 #plt.ylabel('Anteil Wärmeverluste Wärmebedarf')
 #
 
+
+#devs, param, dem = p.load_params()
+
 tac = []
 COP = []
 dt = []
 
-devs, param, dem = p.load_params()
 
 
-#for twp in [0.01]:
-#
-#
-#
-#    
-#    dt_hp = devs["HP"]["dT_cond"]
-#    COP_hp = devs["HP"]["COP"]
-#    
-#    dt.append(dt_hp)
-#    COP.append(COP_hp)
-#    
-#    # Create result directory
-#    dir_results = str(os.path.dirname(os.path.realpath(__file__))) + "\\Results\\kk" + str(twp)
-#    
-#    
-#    
-#    
-#    # tac optimization
+
+for twp in np.arange(21) + 0.0001 :
+
+
+    devs, param, dem = p.load_params(twp)
+    
+    dt_hp = devs["HP"]["dT_cond"]
+    COP_hp = devs["HP"]["COP"]
+    
+    dt.append(dt_hp)
+    COP.append(COP_hp)
+    
+    # Create result directory
+    dir_results = str(os.path.dirname(os.path.realpath(__file__))) + "\\Results\\k" + str(twp)
+    
+    print(twp)
+    
+    
+    
+    # tac optimization
 #    tac_opt = run_optim("tac", "", "", str(dir_results), twp)["tac"]
 #    
 #    
@@ -71,11 +75,11 @@ devs, param, dem = p.load_params()
 #    
 #
 #
-##plt.plot(dt, COP)
-##plt.plot(dt,tac)
+###plt.plot(dt, COP)
+###plt.plot(dt,tac)
+##    
+b = COP
 #    
-#b = COP
-    
 #plt.show()
 
 

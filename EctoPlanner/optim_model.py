@@ -13,14 +13,17 @@ import os
 import json
 import time
 
-def run_optim(devs, param, residual, time_steps, dir_results):
+def run_optim(devs, param, residual, dir_results):
     
     #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     # Load model parameter
     start_time = time.time()
+    time_steps = range(8760)
+
 
     # Create set for devices
-    all_devs = ["BOI", "CHP", "AC", "CC", "EH"]       
+    all_devs = ["BOI", "CHP", "AC", "CC", "EH"]  
+     
          
     #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     # Setting up the model
@@ -174,6 +177,8 @@ def run_optim(devs, param, residual, time_steps, dir_results):
         # Absorption chiller
         model.addConstr(cool["AC"][t] == heat["AC"][t] * devs["AC"]["eta_th"])
 
+   
+    
     #%% ENERGY BALANCES
     for t in time_steps:
         # Heat balance
@@ -239,10 +244,12 @@ def run_optim(devs, param, residual, time_steps, dir_results):
 
     #%% OBJECTIVE FUNCTIONS
     # TOTAL ANNUALIZED COSTS
-    model.addConstr(obj["tac"] == sum(c_inv[dev] for dev in all_devs) + sum(c_om[dev] for dev in all_devs)  
-                                  + gas_total * param["price_gas"] + grid_limit_gas * param["price_cap_gas"] 
-                                  + from_grid_total * param["price_el"] + grid_limit_el * param["price_cap_el"]
-                                  - to_grid_total * param["revenue_feed_in"]
+    model.addConstr(obj["tac"] == sum(c_inv[dev] for dev in all_devs) + sum(c_om[dev] for dev in all_devs)          # annualized BU device costs
+                                  + param["tac_network"]                                                            # annualized network costs
+                                  + param["tac_buildings"]                                                          # annualized building device costs
+                                  + gas_total * param["price_gas"] + grid_limit_gas * param["price_cap_gas"]        # gas costs
+                                  + from_grid_total * param["price_el"] + grid_limit_el * param["price_cap_el"]     # grid electricity costs
+                                  - to_grid_total * param["revenue_feed_in"]                                        # feed-in revenue
 #                                 + from_DC_total * param["price_cool"] + from_DH_total * param["price_heat"]
                                   , "sum_up_TAC")
     
@@ -289,11 +296,16 @@ def run_optim(devs, param, residual, time_steps, dir_results):
         # Save results
         save_results(devs, param, model, residual, dir_results)
         
+        # Calculate levelized costs
+        
+        
+        
         # Return dictionary
         res_obj = {}        
         for k in set_obj:
             res_obj[k] = obj[k].x
-        return res_obj
+        
+        return param, res_obj
     
     
 def save_results(devs, param, model, residual, dir_results):

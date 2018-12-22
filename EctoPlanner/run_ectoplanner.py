@@ -6,20 +6,20 @@ Created on Sat Aug  4 11:07:27 2018
 """
 
 import os
+
 import parameters
-import bldg_balancing
-import design_network_topology
-import design_network_topology_2
-import design_network_topology_3
-import design_balancing_unit
+import buildings
+import network
+import balancing_unit
 import post_processing
+
 import datetime
 import numpy as np
 import time
 
 #%% Define paths
-path_file               = str(os.path.dirname(os.path.realpath(__file__)))
-dir_results             = path_file + "\\Results\\" + str(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
+path_file = str(os.path.dirname(os.path.realpath(__file__)))
+dir_results = path_file + "\\Results\\" + str(datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
 
 if not os.path.exists(dir_results):
     os.makedirs(dir_results)
@@ -29,27 +29,23 @@ if not os.path.exists(dir_results):
 use_case = "FZJ"
 
 
-#TODO: imeplement PV in optimization, and: normalize summands in objective function (two pre-optimizations necessary)
-# maybe only cost optimization
-
 # Load parameters
-nodes, param, devs, time_steps = parameters.load_params(use_case, path_file)
+nodes, param, devs, devs_dom, time_steps = parameters.load_params(use_case, path_file)
 
-#param["LEC"] = 0.08    # kEUR/MWh    levelized electricity costs (equals representative CHP power generation costs)
 
-# Calculate intra-balancing (within buildings)
-#print("Hier Stromgestehungskosten für Intra-Balancing vorgeben (zB 8 ct/kWh) ; diese werden im weiteren Verlauf iterativ bestimmt")
-nodes = bldg_balancing.calc_residuals(nodes, param, time_steps, dir_results)
-            
+
+
+# Balancing of building demands
+nodes, residual = buildings.design_buildings(nodes, param, devs_dom, dir_results)
+           
 # Optimize network topology
-#    print("Minimizing pipe costs:")
-#    design_network_topology.design_network(nodes, param, time_steps, dir_results + "\\Topology " + str(k) + "\\Ganzer_Ansatz")
-
-#print("Minimizing pipe lengths:")
-design_network_topology_3.design_network(nodes, param, time_steps, dir_results)
+param = network.design_network(nodes, param, dir_results)
 
 # Calculate inter-balancing and design balancing unit
-design_balancing_unit.design_balancing_unit(nodes, devs, param, time_steps, dir_results)
+balancing_unit.design_balancing_unit(nodes, devs, param, residual, dir_results)
+
+
+
 
 
 # Post-processing

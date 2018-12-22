@@ -230,7 +230,7 @@ def run_optim(obj_fn, obj_eps, eps_constr, dir_results):
         model.addConstr(cool["AC"][t] == heat["AC"][t] * devs["AC"]["eta_th"])
         
         # Heat Pump
-        model.addConstr(heat["HP"][t] == power["HP"][t] + cool["HP"][t])            # Heat pump energy balance
+        model.addConstr(heat["HP"][t] == power["HP"][t] + cool["HP"][t])                # Heat pump energy balance
         
         if not param["switch_transient_hp"]:
             model.addConstr(heat["HP"][t] == power["HP"][t] * devs["HP"]["COP"])        # COP relation

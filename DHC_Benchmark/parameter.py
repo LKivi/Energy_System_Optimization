@@ -43,7 +43,8 @@ def load_params():
     param_switches = {"switch_low_temp": 1,             # 1: low-temperature heating 0: heating temperature according to real data from FZ Jülich
                       "switch_n_1": 0,                  # consider n-1 redundancy of heating and cooling generation
                       "switch_hp": 1,                    # consider heat pump between cooling and heating return pipes
-                      "switch_transient_hp": 1          # consider variable heat pump working conditions
+                      "switch_transient_hp": 0,          # consider variable heat pump outlet temperature
+                      "switch_pump": 0                   # consider pumping costs
                       }
     
     param.update(param_switches)
@@ -66,14 +67,15 @@ def load_params():
                      "epsilon_asph": 0.88,       #---,       asphalt surface emissivity
                      "evaprate_asph": 0.3,       #---,       asphalt surface evaporation rate
                      "lambda_asph": 0.7,         # W/(m*K),  asphalt heat conductivity
-                     "heatcap_asph": 1950400}    # J/(m^3*K),asphalt volumetric heat capacity
+                     "heatcap_asph": 1950400    # J/(m^3*K),asphalt volumetric heat capacity
+                     }
     
     param.update(param_asphalt)  
     
     
     #%% PIPE PARAMETERS
     param_pipe = {"grid_depth": 1,                  # m,       installation depth beneath surface
-                  "lambda_ins": 0.03,              # W/(m*K), insulation heat conductivity (set pipes GmbH)
+                  "lambda_ins": 0.03,              # W/(m*K),  insulation heat conductivity (set pipes GmbH)
                   "lambda_PE": 0.4,                 # W(m*K),  PE heat conductivity (set pipes GmbH, wikipedia)
                   "lambda_steel": 50,               # W(m*K),  steel heat conductivity (set pipes GmbH)
                   "R_0": 0.0685,                    # m^2*K/W, pipe surface correction for thermal resitance (see DIN EN 13941)   
@@ -105,9 +107,9 @@ def load_params():
     
     param_pump ={ "eta_pump": 0.7,                  # ---,        pump electrical efficiency
                   "inv_pump": 500,                  # kEUR/MW,    pump investment costs
-                  "pump_lifetime": 10,             # a,           pump life time (VDI 2067)
-                  "cost_om_pump": 0.03,              # ---,       pump operation and maintenance costs (VDI 2067)
-                  "pump_electricity_costs": 0.08    # kEUR/MWh    pump electricity costs (equals representative CHP power generation costs)
+                  "pump_lifetime": 10,              # a,          pump life time (VDI 2067)
+                  "cost_om_pump": 0.03,             # ---,        pump operation and maintenance costs (VDI 2067)
+                  "pump_electricity_costs": 0.05    # kEUR/MWh    pump electricity costs (equals representative CHP power generation costs)
                  }
     
     param.update(param_pump)
@@ -183,7 +185,7 @@ def load_params():
     # Electrical energy for pumping
     param["pump_energy"] = (param["load_factor_heating"] * param["pump_cap_heating"] + param["load_factor_cooling"] * param["pump_cap_cooling"])* 8760      # MWh, electrical pump energy
     
-    print(param["pump_energy"])
+#    print(param["pump_energy"])
  
     
 #%% THERMAL LOSSES
@@ -263,7 +265,7 @@ def load_params():
                   "life_time": 20,       # a,    operation time (VDI 2067)
                   "cost_om": 0.025,      #---,   annual operation and maintenance as share of investment (VDI 2067)
                   "dT_evap": 6,          # K,    temperature difference of water in evaporator
-                  "dT_cond": 20,          # K,    temperature difference of water in condenser
+                  "dT_cond": 15,          # K,    temperature difference of water in condenser
                   "eta_compr": 0.8,     # ---,  isentropic efficiency of compression
                   "heatloss_compr": 0.1,  # ---,  heat loss rate of compression
                   "COP_max": 7,
@@ -311,13 +313,18 @@ def load_params():
                   "life_time": 15,      # a,               operation time (VDI 2067)
                   "cost_om": 0.035,     # ---,             annual operation and maintenance costs as share of investment (VDI 2067)
                   "dT_cond": 5,
-                  "dT_evap": param["T_cooling_return"] - param["T_cooling_supply"],
                   "dT_min_cooler": 10,
                   "dT_pinch": 2,
                   "eta_compr": 0.75,     # ---,            isentropic efficiency of compression
                   "heatloss_compr": 0.1,  # ---,           heat loss rate of compression 
                   "COP_max": 6
                   }
+    
+    if param["switch_hp"]:
+        devs["CC"]["dT_evap"] = 1e-5
+    else:
+        devs["CC"]["dT_evap"] = param["T_cooling_return"] - param["T_cooling_supply"]
+    
     
     devs["CC"]["COP"] = calc_COP(devs, param, "CC", devs["CC"]["dT_cond"])
     
@@ -539,7 +546,7 @@ def calc_annual_investment(devs, param, grid_data, dem_buildings):
         res_value = ((n+1) * life_time - observation_time) / life_time * (q ** (-observation_time))
 
         # Calculate annualized investments       
-        if life_time >= observation_time:
+        if life_time > observation_time:
             devs[device]["ann_factor"] = (1 - res_value) * CRF 
         else:
             devs[device]["ann_factor"] = ( 1 + invest_replacements - res_value) * CRF 
@@ -571,7 +578,7 @@ def calc_annual_investment(devs, param, grid_data, dem_buildings):
     # Residual value of final replacement
     res_value = ((n+1) * life_time - observation_time) / life_time * (q ** (-observation_time))
     
-    if life_time >= observation_time:
+    if life_time > observation_time:
         param["tac_pipes"] = (CRF * inv_pipes * (1 - res_value) + param["cost_om_pipe"] * inv_pipes) / 1000      # kEUR,     annualized pipe costs
     else:
         param["tac_pipes"] = (CRF * inv_pipes * (1 + invest_replacements - res_value) + param["cost_om_pipe"] * inv_pipes) / 1000
@@ -600,7 +607,7 @@ def calc_annual_investment(devs, param, grid_data, dem_buildings):
     # Residual value of final replacement
     res_value = ((n+1) * life_time - observation_time) / life_time * (q ** (-observation_time))
      
-    if life_time >= observation_time:
+    if life_time > observation_time:
         param["tac_subs"] = (CRF * inv_subs * (1 - res_value) + param["cost_om_sub"] * inv_subs)      # kEUR,     annualized substation costs
     else:
         param["tac_subs"] = (CRF * inv_subs * (1 + invest_replacements - res_value) + param["cost_om_sub"] * inv_subs)
@@ -611,37 +618,42 @@ def calc_annual_investment(devs, param, grid_data, dem_buildings):
     
     # Pump investment and operation/maintenance costs
     
-    life_time = param["pump_lifetime"]
-                                  
-    inv_pump = param["inv_pump"] * (param["pump_cap_heating"] + param["pump_cap_cooling"])  #kEUR, pump investment costs
+    if param["switch_pump"]:
     
-    # Number of required replacements
-    n = int(math.floor(observation_time / life_time))       
-    # Inestment for replcaments
-    invest_replacements = sum((q ** (-i * life_time)) for i in range(1, n+1))
-    # Residual value of final replacement
-    res_value = ((n+1) * life_time - observation_time) / life_time * (q ** (-observation_time))
-     
-    if life_time >= observation_time:
-        param["tac_pump"] = (CRF * inv_pump * (1 - res_value) + param["cost_om_pump"] * inv_pump)      # kEUR,     annualized pump investment and maintenance costs
-    else:
-        param["tac_pump"] = (CRF * inv_pump * (1 + invest_replacements - res_value) + param["cost_om_pump"] * inv_pump) 
-
-    
-
+        life_time = param["pump_lifetime"]
+                                      
+        inv_pump = param["inv_pump"] * (param["pump_cap_heating"] + param["pump_cap_cooling"])  #kEUR, pump investment costs
         
-    # add Pump electricity costs
-    param["pump_costs_el"] = param["pump_energy"] * param["pump_electricity_costs"]
-    param["tac_pump"] += param["pump_costs_el"]
+        # Number of required replacements
+        n = int(math.floor(observation_time / life_time))       
+        # Inestment for replcaments
+        invest_replacements = sum((q ** (-i * life_time)) for i in range(1, n+1))
+        # Residual value of final replacement
+        res_value = ((n+1) * life_time - observation_time) / life_time * (q ** (-observation_time))
+         
+        if life_time > observation_time:
+            param["tac_pump"] = (CRF * inv_pump * (1 - res_value) + param["cost_om_pump"] * inv_pump)      # kEUR,     annualized pump investment and maintenance costs
+        else:
+            param["tac_pump"] = (CRF * inv_pump * (1 + invest_replacements - res_value) + param["cost_om_pump"] * inv_pump) 
+    
+                
+        # add Pump electricity costs
+        param["pump_costs_el"] = param["pump_energy"] * param["pump_electricity_costs"]
+        param["tac_pump"] += param["pump_costs_el"]
+    
+    else:
+    
+        param["tac_pump"] = 0
+    
     
     #print("pumpe Strom" + str(param["tac_pump"]))
     
     
     # Sum up distribution costs
-    param["tac_distr"] = param["tac_pipes"] + param["tac_subs"] + param["tac_pump"]
+    param["tac_distr"] = param["tac_pipes"] + param["tac_subs"]  + param["tac_pump"]
     
     
-    print(param["tac_distr"])
+#    print(param["tac_distr"])
                                                                            
 
     return devs, param
@@ -670,12 +682,15 @@ def calc_COP(devs, param, device, dt_h):
     
     if device == "HP":
         t_h_in = param["T_heating_return"] + 273.15   # heat sink inlet temperature
+        t_c_in = param["T_cooling_return"] + 273.15   # heat source inlet temperature
     else:
-        t_air = np.loadtxt(open("input_data/weather.csv", "rb"), delimiter = ",",skiprows = 1, usecols=(0))               # Air temperatur °C
+        t_air = np.loadtxt(open("input_data/weather.csv", "rb"), delimiter = ",",skiprows = 1, usecols=(0))               # Air temperature °C
         t_h_in = t_air + devs["CC"]["dT_min_cooler"] + 273.15                                                             # heat sink inlet temperature (cold cooling water)
-    
-    t_c_in = param["T_cooling_return"] + 273.15   # heat source inlet temperature
-    
+        if param["switch_hp"]:
+            t_c_in = param["T_cooling_supply"] + 273.15                                                                       # heat source inlet temperature (safe )
+        else:
+            t_c_in = param["T_cooling_return"] + 273.15
+            
     # Modeling parameters
     dt_pp = devs[device]["dT_pinch"]                # pinch point temperature difference
     eta_is = devs[device]["eta_compr"]              # isentropic compression efficiency
@@ -734,8 +749,8 @@ def calc_COP(devs, param, device, dt_h):
 #%%
 def lin_COP_HP(param, devs):
     
-    t_supply_max = np.max(param["T_heating_supply"])
-    dt_h_max = t_supply_max - param["T_heating_return"]
+#    t_supply_max = np.max(param["T_heating_supply"])
+    dt_h_max = devs["HP"]["dT_cond"]
     
     n_values = 500
     dt_h = np.linspace(0,dt_h_max,n_values)

@@ -1,6 +1,0 @@
-MIPGap  1e-05
-Method  2
-Heuristics  0
-MIPFocus  2
-Cuts  2
-PrePasses  8

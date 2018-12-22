@@ -21,8 +21,10 @@ def load_params(use_case, path_file):
     assert (use_case != "FZJ" or use_case != "EON" or use_case != "simple_test"), "Use case '" + use_case + "' not known."
     path_input = path_file + "\\input_data\\" + use_case + "\\"
     print("Using data set: '" + use_case + "'")
+    
     time_steps = range(8760)
     
+    # Create dict with node information
     nodes = {}       
         
     if use_case == "FZJ":
@@ -42,16 +44,25 @@ def load_params(use_case, path_file):
 
         for index in range(len(latitudes)):
 #        for index in range(5):
-            nodes[index] = {"lat": latitudes[index],
+            nodes[index] = {
+                            "number": index,
+                            "lat": latitudes[index],
                             "lon": longitudes[index],
                             "name": names[index],
                             "heat": np.loadtxt(open(path_demands + names[index] + "_heating.txt", "rb"),delimiter = ",", usecols=(0)),    # kW, heat demand
                             "cool": np.loadtxt(open(path_demands + names[index] + "_cooling.txt", "rb"),delimiter = ",", usecols=(0)),    # kW, cooling demand 
-                            "T_heat": 40,                           # °C, effective temperature needed for heating
-                            "T_cool": 20,                           # °C, effective temperature needed for cooling
+                            "T_heating_supply": 50 * np.ones(8760),                           # °C, supply temperature for heating
+                            "T_cooling_supply": 15 * np.ones(8760),                           # °C, supply temperature for cooling
+                            "T_cooling_return": 20 * np.ones(8760)                            # °C, cooling return temperature
 #                            "x": random.random()*100,
 #                            "y": random.random()*100
                             }
+            
+        for n in nodes:
+             if nodes[n]["name"] == "16.4" or nodes[n]["name"] == "16.3":
+                 nodes[n]["T_cooling_supply"] = 20 * np.ones(8760)
+                 nodes[n]["T_cooling_return"] = 25 * np.ones(8760)
+             
             
             
        
@@ -62,6 +73,7 @@ def load_params(use_case, path_file):
 #            plt.plot(nodes[k]["x"], nodes[k]["y"],".")
 #        
 #        plt.show()
+        
 
 
 #%% GENERAL PARAMETERS
@@ -74,7 +86,7 @@ def load_params(use_case, path_file):
              "price_el": 0.14506,           # kEUR/MWh,     electricity price
              "price_cap_el": 59.660,        # kEUR/(MW*a)   capacity charge for electricity grid usage
              
-             "revenue_feed_in": 0.06442,    # kEUR/MWh,     feed-in revenue for CHP-gernerated power (excluding funding)
+             "revenue_feed_in": 0.06442,    # kEUR/MWh,     feed-in revenue for CHP-generated power
              
              "gas_CO2_emission": 0.2,       # t_CO2/MWh,    specific CO2 emissions (natural gas)
              "grid_CO2_emission": 0.503,    # t_CO2/MWh,    specific CO2 emissions (grid)
@@ -83,16 +95,23 @@ def load_params(use_case, path_file):
              
              "number_of_balancing_units": 1,
              
-#             "n_neighbours": 3,             # ---,          number of closest neighbors each node is allowed to connect with
-#             "n_clusters_x": 3,             # ---,          number of node clusters in x-direction
-#             "n_clusters_y": 2,             # ---,          number of node clusters in y-direction
+             "switch_building_optimization": 1,     # 0: heuristic buildlng balancing; 1: optimal building balancing
+             "switch_nodewise": 1,                  # 1: seperate intra balancing for every building  0: intra balancing of all buildings at the same time
+                                                      
+             "weight_el": 0.12,                     # EUR/kWh, electricity costs for intra-building-balancing
+             "weight_heat": 0.03,                   # EUR/kWh, heat costs for intra-building-balancing
+             "weight_cool": 0.06,                   # EUR/kWh, cooling costs for intra-building-balancing
+
 #             
 #             "price_cool": 1000,            # kEUR/MWh,     price for cooling power from the district cooling grid
 #             "price_heat": 1000,            # kEUR/MWh,     price for heating power from the district heating grid
+             
              "use_eh_in_bldgs": 1,          # ---,          should electric heaters be used in buildings?
-             "op_hours_el_heater": 0,    # h,            hours in which the eletric heater is operated
-             "eta_th_eh": 0.98,             # ---,          thermal efficiency for electric heaters in buildings
-             "obj_weight_tac": 1,         # ---,            weight for objective function, co2 emission is then 1-obj_weight_tac
+#             "direct_cooling": 0,
+             "op_hours_el_heater": 500,    # h,            hours in which the eletric heater is operated
+             
+                
+             "obj_weight_tac": 1,           # ---,          weight for objective function, co2 emission is then 1-obj_weight_tac
              "feasible_TES": 0,             # ---,          are thermal energy storages feasible for BU?
              "feasible_BAT": 0,             # ---,          are batteries feasible for BU?
              "feasible_CTES": 0,            # ---,          are cold thermal energy storages feasible for BU?
@@ -133,13 +152,15 @@ def load_params(use_case, path_file):
                   "f_fric": 0.025,                  # ---,      pipe friction factor
                   "dp_pipe": 150,                   # Pa/m,     nominal pipe pressure gradient
                   "c_f": 4180,                      # J/(kg*K), fluid specific heat capacity
-                  "rho_f": 1000,                    # kg/m^3,   fluid density
-                  "t_soil": 0.6}                    # m,        thickness of soil layer around the pipe to calculate heat transfer into ground
+                  "rho_f": 1000,                    # kg/m^3,   fluid density                 
+                  "conv_pipe": 3600,                # W/(m^2 K) convective heat transfer
+                  "R_0": 0.0685,                    # m^2*K/W, pipe surface correction for thermal resitance (see DIN EN 13941)   
+                  }                   
                   
     param.update(param_pipe)  
     
     param_pipe_eco = {"inv_earth_work": 250,                # EUR/m,           preparation costs for pipe installation
-                       "inv_pipe_PE": 0.114671,              # EUR/(m^2*m),     diameter price for PE pipe without insulation                     
+                       "inv_pipe_PE": 0.114671,             # EUR/(cm^2*m),    diameter price for PE pipe without insulation                     
                        "pipe_lifetime": 30,                 # a,               pipe life time (VDI 2067)
                        "cost_om_pipe": 0.005                 #---,             pipe operation and maintetance costs as share of investment (VDI 2067)
                        }
@@ -150,18 +171,14 @@ def load_params(use_case, path_file):
 
 
     #%% TEMPERATURES
-    param_temperatures = {"T_hot": 20,      # °C,   hot pipe temperature
-                          "T_cold": 12,     # °C,   cold pipe temperature
-                          "dT_min": 0,
+    param_temperatures = {"T_hot": 15 * np.ones(8760),      # °C,   hot pipe temperature
+                          "T_cold": 10 * np.ones(8760),     # °C,   cold pipe temperature
                           }
     
     param.update(param_temperatures)
-     
     
-    param["COP_HP"] = 6
-    param["COP_CC"] = 6
     
-    #%% LOAD DEVICE PARAMETER
+    #%% LOAD BALANCING DEVICES PARAMETER
     
     devs = {}
 
@@ -184,12 +201,12 @@ def load_params(use_case, path_file):
                                 1: 33.75,   # kEUR
                                 2: 96.2     # kEUR
                                 }
-
+    
 
     #%% COMBINED HEAT AND POWER - INTERNAL COMBUSTION ENGINE POWERED BY NATURAL GAS
     devs["CHP"] = {
-                   "eta_el": 0.43,     # ---,            electrical efficiency (JMS 420 B305 at full load)
-                   "eta_th": 0.442,     # ---,           thermal efficiency (JMS 420 B305 at full load)
+                   "eta_el": 0.419,     # ---,           electrical efficiency
+                   "eta_th": 0.448,     # ---,           thermal efficiency
                    "life_time": 15,     # a,             operation time (VDI 2067)
                    "cost_om": 0.08,     # ---,           annual operation and maintenance costs as share of investment (VDI 2067)
                    }   
@@ -249,10 +266,79 @@ def load_params(use_case, path_file):
                             }
     
     
-    devs["CC"]["inv_i"] = { 0: 0,      # kEUR
+    devs["CC"]["inv_i"] = { 0: 0,         # kEUR
                             1: 95,     # kEUR
-                            2: 501     # kEUR
+                            2: 501      # kEUR
                             } 
+
+    
+    #%% ELECTRICAL HEATER
+    # PARAMETER PRÜFEN
+    devs["EH"] = {
+                  "eta_th": 0.9,        # ---,              thermal efficiency
+                  "life_time": 20,      # a,                operation time
+                  "cost_om": 0.01,      # ---,              annual operation and maintenance costs as share of investment
+                  }
+    
+    devs["EH"]["cap_i"] = { 0: 0,       # MW_th
+                            1: 5,       # MW_th
+                            }
+    
+    
+    devs["EH"]["inv_i"] = { 0: 0,         # kEUR
+                            1: 390,       # kEUR
+                            } 
+    
+    
+    
+    #%% LOAD DOMESCTIC TECHNICAL BUILDING EQUIPMENT (TBE) DEVICE PARAMETERS
+    # PRÜFEN!
+
+    devs_dom = {}
+
+    devs_dom["HP"] = {
+                            "life_time": 20,       # a,    operation time (VDI 2067)
+                            "inv_var": 200,        # EUR/kW, domestic heat pump investment costs PRÜFEN
+                            "cost_om": 0.025,      #---,   annual operation and maintenance as share of investment (VDI 2067)
+                            "COP_max": 7
+                            }
+    
+    devs_dom["CC"] = {
+                           "life_time": 15,      # a,               operation time (VDI 2067)
+                           "inv_var": 200,       # EUR/kW, domestic heat pump investment costs PRÜFEN
+                           "cost_om": 0.035,     #---,   annual operation and maintenance as share of investment (VDI 2067)
+                           "COP_max": 6
+                            }
+    
+    
+    devs_dom["EH"] = {
+                            "eta_th": 0.98,        # ---, electric heater efficiency PRÜFEN
+                            "life_time": 20,       # a,    operation time (VDI 2067)
+                            "inv_var": 150,        # EUR/kW, domestic heat pump investment costs PRÜFEN
+                            "cost_om": 0.02,      #---,   annual operation and maintenance as share of investment 
+                            }  
+    
+    devs_dom["free_cooler"] = {
+                            "dT_min": 5,
+                            "life_time": 20,       # a,    operation time (VDI 2067)
+                            "inv_var": 20,         # EUR/kW, domestic heat pump investment costs PRÜFEN
+                            "cost_om": 0.01,      #---,   annual operation and maintenance as share of investment 
+                            } 
+    
+    devs_dom["air_cooler"] = {
+                            "dT_min": 10,
+                            "life_time": 20,       # a,    operation time (VDI 2067)
+                            "inv_var": 40,        # EUR/kW, domestic heat pump investment costs PRÜFEN
+                            "cost_om": 0.02,      #---,   annual operation and maintenance as share of investment 
+                            } 
+    
+    # Calculate COP of domestic HPs and CCs
+    devs_dom = calc_COP_buildings(param, devs_dom, nodes)
+
+
+
+    
+    
     
     #%% (HEAT) THERMAL ENERGY STORAGE
 #    devs["TES"] = {
@@ -283,25 +369,6 @@ def load_params(use_case, path_file):
 #                                2: 410.55,         # kEUR
 #                                3: 1083.3          # kEUR
 #                                } 
-    
-    #%% ELECTRICAL HEATER
-    # PARAMETER PRÜFEN
-    devs["EH"] = {
-                  "eta_th": 0.9,        # ---,              thermal efficiency
-                  "life_time": 20,      # a,                operation time
-                  "cost_om": 0.01,      # ---,              annual operation and maintenance costs as share of investment
-                  }
-    
-    devs["EH"]["cap_i"] = { 0: 0,       # MW_th
-                            1: 5,     # MW_th
-                            }
-    
-    
-    devs["EH"]["inv_i"] = { 0: 0,         # kEUR
-                            1: 390,       # kEUR
-                            } 
-    
-    #%% HEAT PUMP
     
     
     
@@ -353,9 +420,9 @@ def load_params(use_case, path_file):
 #                       }
 
     # Calculate annualized investment of every device
-    devs = calc_annual_investment(devs, param)
+    devs = calc_annual_investment(devs, devs_dom, param)
 
-    return nodes, param, devs, time_steps
+    return nodes, param, devs, devs_dom, time_steps
 
 #def get_grid_temp_hot_pipe(mode, time_steps):
 #    if mode == "two_point_control":
@@ -431,146 +498,9 @@ def transform_coordinates(nodes):
     return nodes
 
 
-#%%
-#    # get list of banned edges; each node is only allowed to connect with its closest neighbour
-#def ban_edges(param, nodes, compl_graph, edge_dict, edge_dict_rev, edges):
-#    
-#    allowed_edges = []
-#    
-#    for node in range(len(nodes)):
-#        
-#        # find all edges which start or end at this node and calculate their length
-#        all_edges = []
-#        all_lengths = []
-#        adjacent_edges = list(compl_graph.edges(node, data=False))        
-#        for e in adjacent_edges:
-#            if e[0] > e[1]:
-#                e = (e[1], e[0])
-#            edge_id = edge_dict[e]
-#            
-#            x1, y1 = nodes[edge_dict_rev[edge_id][0]]["x"], nodes[edge_dict_rev[edge_id][0]]["y"]
-#            x2, y2 = nodes[edge_dict_rev[edge_id][1]]["x"], nodes[edge_dict_rev[edge_id][1]]["y"]
-#            length = math.sqrt((x1-x2)**2 + (y1-y2)**2) 
-#            all_edges.append(edge_id)
-#            all_lengths.append(length)
-#        
-#        # collect allowed connections
-#        n_allowed = param["n_neighbours"]      
-#        # list of allowed connections [(length 1, edge_id 1), ... , (length n_allowed, edge_id n_allowed)]
-#        allowed_zipped =  sorted(zip(all_lengths, all_edges))[:n_allowed]
-#        
-#        for item in allowed_zipped:
-#            #check if edge is already allowed
-#            already_allowed = 0
-#            for edge in allowed_edges:
-#                if edge == item[1]:
-#                    already_allowed = 1
-#            if already_allowed == 0:
-#                allowed_edges.append(item[1])
-#                
-#    # remove allowed edges from edgeID-list to get banned edges
-#    banned_edges = list(edges)
-#    for edge in allowed_edges:
-#        banned_edges.remove(edge)
-#            
-#    return allowed_edges, banned_edges
-            
-    
-#%% Aggregate building nodes to clusters    
-#def cluster_nodes(nodes, param):
-#    
-#    # get length of the whole area
-#    len_total_X = max(nodes[k]["x"] for k in range(len(nodes)))
-#    len_total_Y = max(nodes[k]["y"] for k in range(len(nodes)))
-#    
-#    # cluster lengths
-#    len_cluster_X = len_total_X / param["n_clusters_x"]
-#    len_cluster_Y = len_total_Y / param["n_clusters_y"]
-#    
-#    # get cluster borders
-#    dict_clusters = {}
-#    for n_y in range(param["n_clusters_y"]):
-#        dict_clusters[n_y] = {}
-#        for n_x in range(param["n_clusters_x"]):
-#            dict_clusters[n_y][n_x] = {}
-#            dict_clusters[n_y][n_x]["ID"] = str(n_y) + str(n_x)
-#            dict_clusters[n_y][n_x]["dy"] = [(param["n_clusters_y"]-n_y-1)*len_cluster_Y, (param["n_clusters_y"]-n_y)*len_cluster_Y]
-#            dict_clusters[n_y][n_x]["dx"] = [n_x*len_cluster_X, (n_x+1)*len_cluster_X]
-#     
-#    # Assign nodes to clusters
-#    for row in dict_clusters:
-#        for col in dict_clusters[row]:
-#            dict_clusters[row][col]["nodes"] = []
-#            for n in nodes:
-#                if dict_clusters[row][col]["dx"][0] <= nodes[n]["x"] and nodes[n]["x"] <= dict_clusters[row][col]["dx"][1] and dict_clusters[row][col]["dy"][0] <= nodes[n]["y"] and nodes[n]["y"] <= dict_clusters[row][col]["dy"][1]:
-#                    dict_clusters[row][col]["nodes"].append(n)
-#    
-#    # find empty clusters
-#    for row in dict_clusters:
-#        for col in dict_clusters[row]:
-#            if len(dict_clusters[row][col]["nodes"]) == 0:
-#                dict_clusters[row][col]["is_empty"] = True
-#            else:
-#                dict_clusters[row][col]["is_empty"] = False
-#    
-#    # plot cluster borders and nodes
-#    # vertical borders
-#    for k in range(param["n_clusters_x"] + 1):
-#        x = k*len_cluster_X
-#        plt.plot([x,x], [0,len_total_Y], 'k--')
-#    # horizontal borders
-#    for k in range(param["n_clusters_y"] + 1):
-#        y = k*len_cluster_Y
-#        plt.plot([0,len_total_X], [y,y], 'k--')
-#    # plot nodes as dots
-#    for n in nodes:
-#        plt.plot(nodes[n]["x"], nodes[n]["y"], 'r.')
-#    
-#    plt.show()
-#    
-#    return dict_clusters
-
-
-#def cluster_connections(dict_clusters, edge_dict):
-#        
-#    # find possible node connections between clusters
-#    dict_connections = {}
-#    for row in dict_clusters:
-#        for col in dict_clusters[row]:
-#            dict_connections[con] = []
-#            nodes_from = dict_clusters[con[0]]["nodes"]
-#            nodes_to = dict_clusters[con[1]]["nodes"]
-#            # Find each possible edge between the two clusters
-#            for n1 in nodes_from:
-#                for n2 in nodes_to:
-#                    if n2 > n1:
-#                        edge = (n1,n2)
-#                    else:
-#                        edge = (n2,n1)
-#                    dict_connections[con].append(edge_dict[edge])
-#    
-#    return dict_connections
-    
-#%% generate pseudo demands
-def generate_demands(edge_list, edge_dict, nodes):
-    
-    # initialize demands
-    dem = {}
-    for node in nodes:
-        dem[node] = np.zeros(len(edge_list))
-    
-    for edge in edge_list:
-        index = edge_dict[edge]
-        n0 = edge[0]
-        n1 = edge[1]
-        dem[n0][index] = 1
-        dem[n1][index] = -1
-    
-    return dem
-
     
 #%%
-def calc_annual_investment(devs, param):
+def calc_annual_investment(devs, devs_dom, param):
     """
     Calculation of total investment costs including replacements (based on VDI 2067-1, pages 16-17).
 
@@ -590,6 +520,9 @@ def calc_annual_investment(devs, param):
     interest_rate = param["interest_rate"]
     q = 1 + param["interest_rate"]
 
+    
+    # Balancing devices
+    
     # Calculate capital recovery factor
     CRF = ((q**observation_time)*interest_rate)/((q**observation_time)-1)
 
@@ -609,14 +542,92 @@ def calc_annual_investment(devs, param):
         res_value = ((n+1) * life_time - observation_time) / life_time * (q ** (-observation_time))
 
         # Calculate annualized investments       
-        if life_time >= observation_time:
+        if life_time > observation_time:
             devs[device]["ann_factor"] = (1 - res_value) * CRF 
         else:
             devs[device]["ann_factor"] = ( 1 + invest_replacements - res_value) * CRF 
+       
+    
+    # Building devices
+    
+    for device in devs_dom.keys():
+        
+        # Get device life time
+        life_time = devs_dom[device]["life_time"]
+
+        # Number of required replacements
+        n = int(math.floor(observation_time / life_time))
+        
+        # Inestment for replcaments
+        invest_replacements = sum((q ** (-i * life_time)) for i in range(1, n+1))
+
+        # Residual value of final replacement
+        res_value = ((n+1) * life_time - observation_time) / life_time * (q ** (-observation_time))
+
+        # Calculate annualized investments       
+        if life_time > observation_time:
+            devs_dom[device]["ann_factor"] = (1 - res_value) * CRF
+        else:
+            devs_dom[device]["ann_factor"] = ( 1 + invest_replacements - res_value) * CRF 
+            
+    
+    # Distribution devices (pipes, pumps)
+    
+    for dev in ["pipe"]: #PUmpe fehlt noch
+        
+        # Get device life time
+        life_time = param[dev + "_lifetime"]
+        
+        # Number of required replacements
+        n = int(math.floor(observation_time / life_time))
+        
+        # Inestment for replcaments
+        invest_replacements = sum((q ** (-i * life_time)) for i in range(1, n+1))
+
+        # Residual value of final replacement
+        res_value = ((n+1) * life_time - observation_time) / life_time * (q ** (-observation_time))
+
+        # Calculate annualized investments       
+        if life_time > observation_time:
+            param["ann_factor_" + dev] = (1 - res_value) * CRF 
+        else:
+            param["ann_factor_" + dev] = ( 1 + invest_replacements - res_value) * CRF 
 
     return devs
 
 
+
+#%% COP correlation for domestic heat pumps and compression chillers
+    
+def calc_COP_buildings(param, devs_dom, nodes):
+    
+    A = 0.67
+    B = 12.90
+    
+    devs_dom["HP"]["COP"] = {}
+    devs_dom["CC"]["COP"] = {}
+    
+    for n in nodes:
+        
+        T_sink_HP = nodes[n]["T_heating_supply"]
+        T_source_HP = param["T_hot"]
+        
+        T_sink_CC = param["T_hot"]
+        T_source_CC = nodes[n]["T_cooling_supply"] + 1e-5
+        
+        
+        devs_dom["HP"]["COP"][n] = A * (T_sink_HP + 273.15)/(T_sink_HP - T_source_HP + B)
+        devs_dom["CC"]["COP"][n] = A * (T_sink_CC + 273.15)/(T_sink_CC - T_source_CC + B) - 1
+        
+        for t in range(8760):
+            if devs_dom["HP"]["COP"][n][t] > devs_dom["HP"]["COP_max"] or devs_dom["HP"]["COP"][n][t] < 0:
+                devs_dom["HP"]["COP"][n][t] = devs_dom["HP"]["COP_max"]
+            if devs_dom["CC"]["COP"][n][t] > devs_dom["CC"]["COP_max"] or devs_dom["CC"]["COP"][n][t] < 0:
+                devs_dom["CC"]["COP"][n][t] = devs_dom["CC"]["COP_max"] 
+    
+    return devs_dom
+        
+        
 
 
 #%% COP model for ammonia-heat pumps
@@ -653,13 +664,17 @@ def calc_COP(devs, param, device, dt_h):
     t_h_s = dt_h/np.log((t_h_in + dt_h)/t_h_in)
     t_c_s = dt_c/np.log(t_c_in/(t_c_in - dt_c))
     
+    for t in range(8760):
+        if t_h_s[t] == t_c_s[t]:
+            t_h_s[t] += 1e-5
+    
     #Lorentz-COP
     COP_Lor = t_h_s/(t_h_s - t_c_s)
     
     
     # linear model equations
     dt_r_H = 0.2*(t_h_in + dt_h - (t_c_in - dt_c) + 2*dt_pp) + 0.2*dt_h + 0.016        # mean entropic heat difference in condenser deducting dt_pp
-    w_is = 0.0014*(t_h_in + dt_h - (t_c_in - dt_c) + 2*dt_pp) - 0.0015*dt_h + 0.039    # ratio of isentropic expansion work and isentropic compression work
+    w_is = 0.0014*(t_h_in + dt_h - (t_c_in - dt_c) + 2*dt_pp) - 0.0015*dt_h + 0.039    # ratio of isentropic expansion work to isentropic compression work
     
     
     # help values
@@ -670,7 +685,7 @@ def calc_COP(devs, param, device, dt_h):
     COP = COP_Lor * num/denom * eta_is * (1 - w_is) + 1 - eta_is - f_Q
     
     if device == "CC":
-        COP = COP - 1   # consider COP definition for compression chillers  (COP_CC = Q_0/P_el = (Q - P_el)/P_el = COP_HP - 1)
+        COP = COP - 1   # consider COP definition for compression chillers (COP_CC = Q_0/P_el = (Q - P_el)/P_el = COP_HP - 1)
     
     # limit COP's
     COP_max = devs[device]["COP_max"]
@@ -693,10 +708,7 @@ def calc_COP(devs, param, device, dt_h):
     
 #        print(COP)
     return COP
-
-
-
-
+    
 
 
 
@@ -859,3 +871,141 @@ def calc_COP(devs, param, device, dt_h):
 #                "bldg_id":  "1660",
 #                }
 #nodes, param, devs, time_steps = load_params("FZJ", str(os.path.dirname(os.path.realpath(__file__))))
+    
+    
+#%%
+#    # get list of banned edges; each node is only allowed to connect with its closest neighbour
+#def ban_edges(param, nodes, compl_graph, edge_dict, edge_dict_rev, edges):
+#    
+#    allowed_edges = []
+#    
+#    for node in range(len(nodes)):
+#        
+#        # find all edges which start or end at this node and calculate their length
+#        all_edges = []
+#        all_lengths = []
+#        adjacent_edges = list(compl_graph.edges(node, data=False))        
+#        for e in adjacent_edges:
+#            if e[0] > e[1]:
+#                e = (e[1], e[0])
+#            edge_id = edge_dict[e]
+#            
+#            x1, y1 = nodes[edge_dict_rev[edge_id][0]]["x"], nodes[edge_dict_rev[edge_id][0]]["y"]
+#            x2, y2 = nodes[edge_dict_rev[edge_id][1]]["x"], nodes[edge_dict_rev[edge_id][1]]["y"]
+#            length = math.sqrt((x1-x2)**2 + (y1-y2)**2) 
+#            all_edges.append(edge_id)
+#            all_lengths.append(length)
+#        
+#        # collect allowed connections
+#        n_allowed = param["n_neighbours"]      
+#        # list of allowed connections [(length 1, edge_id 1), ... , (length n_allowed, edge_id n_allowed)]
+#        allowed_zipped =  sorted(zip(all_lengths, all_edges))[:n_allowed]
+#        
+#        for item in allowed_zipped:
+#            #check if edge is already allowed
+#            already_allowed = 0
+#            for edge in allowed_edges:
+#                if edge == item[1]:
+#                    already_allowed = 1
+#            if already_allowed == 0:
+#                allowed_edges.append(item[1])
+#                
+#    # remove allowed edges from edgeID-list to get banned edges
+#    banned_edges = list(edges)
+#    for edge in allowed_edges:
+#        banned_edges.remove(edge)
+#            
+#    return allowed_edges, banned_edges
+            
+    
+#%% Aggregate building nodes to clusters    
+#def cluster_nodes(nodes, param):
+#    
+#    # get length of the whole area
+#    len_total_X = max(nodes[k]["x"] for k in range(len(nodes)))
+#    len_total_Y = max(nodes[k]["y"] for k in range(len(nodes)))
+#    
+#    # cluster lengths
+#    len_cluster_X = len_total_X / param["n_clusters_x"]
+#    len_cluster_Y = len_total_Y / param["n_clusters_y"]
+#    
+#    # get cluster borders
+#    dict_clusters = {}
+#    for n_y in range(param["n_clusters_y"]):
+#        dict_clusters[n_y] = {}
+#        for n_x in range(param["n_clusters_x"]):
+#            dict_clusters[n_y][n_x] = {}
+#            dict_clusters[n_y][n_x]["ID"] = str(n_y) + str(n_x)
+#            dict_clusters[n_y][n_x]["dy"] = [(param["n_clusters_y"]-n_y-1)*len_cluster_Y, (param["n_clusters_y"]-n_y)*len_cluster_Y]
+#            dict_clusters[n_y][n_x]["dx"] = [n_x*len_cluster_X, (n_x+1)*len_cluster_X]
+#     
+#    # Assign nodes to clusters
+#    for row in dict_clusters:
+#        for col in dict_clusters[row]:
+#            dict_clusters[row][col]["nodes"] = []
+#            for n in nodes:
+#                if dict_clusters[row][col]["dx"][0] <= nodes[n]["x"] and nodes[n]["x"] <= dict_clusters[row][col]["dx"][1] and dict_clusters[row][col]["dy"][0] <= nodes[n]["y"] and nodes[n]["y"] <= dict_clusters[row][col]["dy"][1]:
+#                    dict_clusters[row][col]["nodes"].append(n)
+#    
+#    # find empty clusters
+#    for row in dict_clusters:
+#        for col in dict_clusters[row]:
+#            if len(dict_clusters[row][col]["nodes"]) == 0:
+#                dict_clusters[row][col]["is_empty"] = True
+#            else:
+#                dict_clusters[row][col]["is_empty"] = False
+#    
+#    # plot cluster borders and nodes
+#    # vertical borders
+#    for k in range(param["n_clusters_x"] + 1):
+#        x = k*len_cluster_X
+#        plt.plot([x,x], [0,len_total_Y], 'k--')
+#    # horizontal borders
+#    for k in range(param["n_clusters_y"] + 1):
+#        y = k*len_cluster_Y
+#        plt.plot([0,len_total_X], [y,y], 'k--')
+#    # plot nodes as dots
+#    for n in nodes:
+#        plt.plot(nodes[n]["x"], nodes[n]["y"], 'r.')
+#    
+#    plt.show()
+#    
+#    return dict_clusters
+
+
+#def cluster_connections(dict_clusters, edge_dict):
+#        
+#    # find possible node connections between clusters
+#    dict_connections = {}
+#    for row in dict_clusters:
+#        for col in dict_clusters[row]:
+#            dict_connections[con] = []
+#            nodes_from = dict_clusters[con[0]]["nodes"]
+#            nodes_to = dict_clusters[con[1]]["nodes"]
+#            # Find each possible edge between the two clusters
+#            for n1 in nodes_from:
+#                for n2 in nodes_to:
+#                    if n2 > n1:
+#                        edge = (n1,n2)
+#                    else:
+#                        edge = (n2,n1)
+#                    dict_connections[con].append(edge_dict[edge])
+#    
+#    return dict_connections
+    
+#%% generate pseudo demands
+#def generate_demands(edge_list, edge_dict, nodes):
+#    
+#    # initialize demands
+#    dem = {}
+#    for node in nodes:
+#        dem[node] = np.zeros(len(edge_list))
+#    
+#    for edge in edge_list:
+#        index = edge_dict[edge]
+#        n0 = edge[0]
+#        n1 = edge[1]
+#        dem[n0][index] = 1
+#        dem[n1][index] = -1
+#    
+#    return dem
