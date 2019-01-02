@@ -36,13 +36,13 @@ nodes, param, devs, devs_dom, time_steps = parameters.load_params(use_case, path
 
 
 # Balancing of building demands
-nodes, residual = buildings.design_buildings(nodes, param, devs_dom, dir_results)
+nodes, residual = buildings.design_buildings(nodes, param, devs, devs_dom, dir_results)
            
 # Optimize network topology
-param = network.design_network(nodes, param, dir_results)
+#param = network.design_network(nodes, param, dir_results)
 
 # Calculate inter-balancing and design balancing unit
-balancing_unit.design_balancing_unit(nodes, devs, param, residual, dir_results)
+#balancing_unit.design_balancing_unit(nodes, devs, param, residual, dir_results)
 
 
 

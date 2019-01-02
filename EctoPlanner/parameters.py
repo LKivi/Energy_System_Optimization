@@ -35,6 +35,8 @@ def load_params(use_case, path_file):
         latitudes =  np.loadtxt(open(path_nodes, "rb"), delimiter = ",", usecols=(0))                       # °,        node latitudes
         longitudes =  np.loadtxt(open(path_nodes, "rb"), delimiter = ",", usecols=(1))                      # °,        node latitudes
         names = np.genfromtxt(open(path_nodes, "rb"),dtype = 'str', delimiter = ",", usecols=(3))       # --,            node names
+        
+        t_air = np.loadtxt(open("input_data/weather.csv", "rb"), delimiter = ",",skiprows = 1, usecols=(0))        # Air temperatur °C
                     
         
         # Select 5 random nodes
@@ -51,17 +53,18 @@ def load_params(use_case, path_file):
                             "name": names[index],
                             "heat": np.loadtxt(open(path_demands + names[index] + "_heating.txt", "rb"),delimiter = ",", usecols=(0)),    # kW, heat demand
                             "cool": np.loadtxt(open(path_demands + names[index] + "_cooling.txt", "rb"),delimiter = ",", usecols=(0)),    # kW, cooling demand 
-                            "T_heating_supply": 50 * np.ones(8760),                           # °C, supply temperature for heating
-                            "T_cooling_supply": 15 * np.ones(8760),                           # °C, supply temperature for cooling
-                            "T_cooling_return": 20 * np.ones(8760)                            # °C, cooling return temperature
+                            "T_heating_supply": 54.75 - 0.7471 * t_air,                       # °C, supply temperature for heating
+                            "T_cooling_supply": 10 * np.ones(8760),                           # °C, supply temperature for cooling
+                            "T_cooling_return": 15 * np.ones(8760)                            # °C, cooling return temperature
 #                            "x": random.random()*100,
 #                            "y": random.random()*100
                             }
             
+        
         for n in nodes:
              if nodes[n]["name"] == "16.4" or nodes[n]["name"] == "16.3":
-                 nodes[n]["T_cooling_supply"] = 20 * np.ones(8760)
-                 nodes[n]["T_cooling_return"] = 25 * np.ones(8760)
+                 # nodes[n]["T_cooling_supply"] = 20 * np.ones(8760)
+                 nodes[n]["T_cooling_return"] = 30 * np.ones(8760)
              
             
             
@@ -96,7 +99,7 @@ def load_params(use_case, path_file):
              "number_of_balancing_units": 1,
              
              "switch_building_optimization": 1,     # 0: heuristic buildlng balancing; 1: optimal building balancing
-             "switch_nodewise": 1,                  # 1: seperate intra balancing for every building  0: intra balancing of all buildings at the same time
+             "switch_nodewise": 0,                  # 1: seperate intra balancing for every building  0: intra balancing of all buildings at the same time
                                                       
              "weight_el": 0.12,                     # EUR/kWh, electricity costs for intra-building-balancing
              "weight_heat": 0.03,                   # EUR/kWh, heat costs for intra-building-balancing
@@ -106,23 +109,38 @@ def load_params(use_case, path_file):
 #             "price_cool": 1000,            # kEUR/MWh,     price for cooling power from the district cooling grid
 #             "price_heat": 1000,            # kEUR/MWh,     price for heating power from the district heating grid
              
-             "use_eh_in_bldgs": 1,          # ---,          should electric heaters be used in buildings?
+             "use_eh_in_bldgs": 1,                 # ---,          should electric heaters be used in buildings?
+             "use_boi_in_bldgs": 1,                # ---,          should boilers be used in buildings?
+             "use_free_cooler_in_bldgs": 1,        # ---,  should free coolers be used in buildings?
+             "use_air_cooler_in_bldgs": 1,         # ---,   should air coolers be used in buildings?
 #             "direct_cooling": 0,
              "op_hours_el_heater": 500,    # h,            hours in which the eletric heater is operated
              
-                
+             "switch_combined_storage": 1,    # ---,        1: integrated hot and cold storage, 0: two seperated storages for heating and cooling  
+             "n_storage_changes": 4,          # ---,        maximum number of storage function changes per year ( hot <-> cold)
+                             
              "obj_weight_tac": 1,           # ---,          weight for objective function, co2 emission is then 1-obj_weight_tac
-             "feasible_TES": 0,             # ---,          are thermal energy storages feasible for BU?
-             "feasible_BAT": 0,             # ---,          are batteries feasible for BU?
-             "feasible_CTES": 0,            # ---,          are cold thermal energy storages feasible for BU?
+             "feasible_TES": 1,             # ---,          are thermal energy storages feasible for BU?
+#             "feasible_BAT": 0,             # ---,          are batteries feasible for BU?
+#             "feasible_CTES": 0,            # ---,          are cold thermal energy storages feasible for BU?
              "feasible_BOI": 1,             # ---,          are gas-fired boilers feasible for BU?
-             "feasible_from_DH": 0,         # ---,          is a connection to district heating network possible?
-             "feasible_from_DC": 0,         # ---,          is a connection to district cooling network possible?
+#             "feasible_from_DH": 0,         # ---,          is a connection to district heating network possible?
+#             "feasible_from_DC": 0,         # ---,          is a connection to district cooling network possible?
              "feasible_CHP": 1,             # ---,          are CHP units feasible for BU?
              "feasible_EH": 1,              # ---,          are electric heater feasible for BU?
              "feasible_CC": 1,              # ---,          are compression chiller feasible for BU?
              "feasible_AC": 1,              # ---,          are absorbtion chiller feasible for BU?
              }
+
+
+    #%% PIPE TEMPERATURES
+    param_temperatures = {"T_hot": 12 * np.ones(8760),      # °C,   hot pipe temperature
+                          "T_cold": 7 * np.ones(8760),     # °C,   cold pipe temperature
+                          }
+    
+    param.update(param_temperatures)
+
+
     
     #%% SOIL PARAMETERS   
     param_soil = {"alpha_soil": 0.8,            #---,       soil surface absorptance
@@ -170,12 +188,7 @@ def load_params(use_case, path_file):
     
 
 
-    #%% TEMPERATURES
-    param_temperatures = {"T_hot": 15 * np.ones(8760),      # °C,   hot pipe temperature
-                          "T_cold": 10 * np.ones(8760),     # °C,   cold pipe temperature
-                          }
-    
-    param.update(param_temperatures)
+
     
     
     #%% LOAD BALANCING DEVICES PARAMETER
@@ -273,21 +286,21 @@ def load_params(use_case, path_file):
 
     
     #%% ELECTRICAL HEATER
-    # PARAMETER PRÜFEN
-    devs["EH"] = {
-                  "eta_th": 0.9,        # ---,              thermal efficiency
-                  "life_time": 20,      # a,                operation time
-                  "cost_om": 0.01,      # ---,              annual operation and maintenance costs as share of investment
-                  }
-    
-    devs["EH"]["cap_i"] = { 0: 0,       # MW_th
-                            1: 5,       # MW_th
-                            }
-    
-    
-    devs["EH"]["inv_i"] = { 0: 0,         # kEUR
-                            1: 390,       # kEUR
-                            } 
+#    # PARAMETER PRÜFEN
+#    devs["EH"] = {
+#                  "eta_th": 0.9,        # ---,              thermal efficiency
+#                  "life_time": 20,      # a,                operation time
+#                  "cost_om": 0.01,      # ---,              annual operation and maintenance costs as share of investment
+#                  }
+#    
+#    devs["EH"]["cap_i"] = { 0: 0,       # MW_th
+#                            1: 5,       # MW_th
+#                            }
+#    
+#    
+#    devs["EH"]["inv_i"] = { 0: 0,         # kEUR
+#                            1: 390,       # kEUR
+#                            } 
     
     
     
@@ -296,17 +309,28 @@ def load_params(use_case, path_file):
 
     devs_dom = {}
 
+    devs_dom["BOI"] = {
+                            "life_time": 20,       # a,    operation time (VDI 2067)
+                            "inv_var": 70,        # EUR/kW, domestic heat pump investment costs
+                            "inv_fix": 0,
+                            "cost_om": 0.03,      #---,   annual operation and maintenance as share of investment (VDI 2067)
+                            "eta_th": 0.9
+                            }    
+    
+    
     devs_dom["HP"] = {
                             "life_time": 20,       # a,    operation time (VDI 2067)
-                            "inv_var": 200,        # EUR/kW, domestic heat pump investment costs PRÜFEN
+                            "inv_var": 200,        # EUR/kW, domestic heat pump investment costs
+                            "inv_fix": 0,
                             "cost_om": 0.025,      #---,   annual operation and maintenance as share of investment (VDI 2067)
                             "COP_max": 7
                             }
     
     devs_dom["CC"] = {
-                           "life_time": 15,      # a,               operation time (VDI 2067)
-                           "inv_var": 200,       # EUR/kW, domestic heat pump investment costs PRÜFEN
-                           "cost_om": 0.035,     #---,   annual operation and maintenance as share of investment (VDI 2067)
+                           "life_time": 15,      # a,      operation time (VDI 2067)
+                           "inv_var": 200,       # EUR/kW, domestic heat pump investment costs
+                           "inv_fix": 0,
+                           "cost_om": 0.035,     #---,     annual operation and maintenance as share of investment (VDI 2067)
                            "COP_max": 6
                             }
     
@@ -314,22 +338,25 @@ def load_params(use_case, path_file):
     devs_dom["EH"] = {
                             "eta_th": 0.98,        # ---, electric heater efficiency PRÜFEN
                             "life_time": 20,       # a,    operation time (VDI 2067)
-                            "inv_var": 150,        # EUR/kW, domestic heat pump investment costs PRÜFEN
-                            "cost_om": 0.02,      #---,   annual operation and maintenance as share of investment 
+                            "inv_var": 162.95,     # EUR/kW, domestic heat pump investment costs
+                            "inv_fix": 0,          # EUR 
+                            "cost_om": 0.02,       #---,   annual operation and maintenance as share of investment 
                             }  
     
     devs_dom["free_cooler"] = {
-                            "dT_min": 5,
-                            "life_time": 20,       # a,    operation time (VDI 2067)
-                            "inv_var": 20,         # EUR/kW, domestic heat pump investment costs PRÜFEN
-                            "cost_om": 0.01,      #---,   annual operation and maintenance as share of investment 
+                            "dT_min": 3,
+                            "life_time": 30,       # a,    operation time (VDI 2067)
+                            "inv_var": 11.436,     # EUR/kW, domestic heat pump investment costs
+                            "inv_fix": 3896,       # EUR
+                            "cost_om": 0.03,       #---,   annual operation and maintenance as share of investment 
                             } 
     
     devs_dom["air_cooler"] = {
                             "dT_min": 10,
-                            "life_time": 20,       # a,    operation time (VDI 2067)
-                            "inv_var": 40,        # EUR/kW, domestic heat pump investment costs PRÜFEN
-                            "cost_om": 0.02,      #---,   annual operation and maintenance as share of investment 
+                            "life_time": 20,        # a,    operation time (VDI 2067)
+                            "inv_var": 37.419,      # EUR/kW, domestic heat pump investment costs
+                            "inv_fix": 312.93,      # EUR
+                            "cost_om": 0.035,        #---,   annual operation and maintenance as share of investment (VDI)
                             } 
     
     # Calculate COP of domestic HPs and CCs
@@ -340,35 +367,36 @@ def load_params(use_case, path_file):
     
     
     
-    #%% (HEAT) THERMAL ENERGY STORAGE
-#    devs["TES"] = {
-#                   "switch_TES": 0,     # toggle availability of thermal storage
-#                   "max_cap": 250,      # MWh_th,          maximum thermal storage capacity
-#                   "min_cap": 0,        # MWh_th,           minimum thermal storage capacity              
-#                   "sto_loss": 0.005,   # 1/h,              standby losses over one time step
-#                   "eta_ch": 0.975,     # ---,              charging efficiency
-#                   "eta_dch": 0.975,    # ---,              discharging efficiency
-#                   "max_ch": 1000,      # MW,               maximum charging power
-#                   "max_dch": 1000,     # MW,               maximum discharging power
-#                   "soc_init": 0.8,     # ---,              maximum initial state of charge
-#                   "soc_max": 1,        # ---,              maximum state of charge
-#                   "soc_min": 0,        # ---,              minimum state of charge
-#                   "life_time": 20,     # a,                operation time (VDI 2067 Trinkwasserspeicher)
-#                   "cost_om": 0.02,     # ---,              annual operation and maintenance costs as share of investment (VDI 2067 Trinkwasserspeicher)
-#
-#                   }
-#    
-#    devs["TES"]["cap_i"] =   { 0: 0,         # MWh_th,      depends on temperature difference! Q = V * c_p * rho * dT
-#                               1: 8.128,     # MWh_th
-#                               2: 40.639,    # MWh_th
-#                               3: 243.833    # MWh_th
-#                               }
-#    
-#    devs["TES"]["inv_i"] = {    0: 0,              # kEUR
-#                                1: 147.2,          # kEUR,    includes factor of 1.15 for pressure correction factor due to high temperatures; higher pressure is needed to prevent evaporation
-#                                2: 410.55,         # kEUR
-#                                3: 1083.3          # kEUR
-#                                } 
+    #%% THERMAL ENERGY STORAGE
+    
+    for device in ["TES", "CTES"]:
+    
+        devs[device] = {
+                       "max_cap": 50,      # MWh_th,            maximum thermal storage capacity
+                       "min_cap": 0,        # MWh_th,           minimum thermal storage capacity              
+                       "sto_loss": 0.005,   # 1/h,              standby losses over one time step
+                       "eta_ch": 0.975,     # ---,              charging efficiency
+                       "eta_dch": 0.975,    # ---,              discharging efficiency
+                       "max_ch": 2,         # MW,               maximum charging power
+                       "max_dch": 2,        # MW,               maximum discharging power
+                       "soc_init": 1,     # ---,              maximum initial state of charge
+                       "soc_max": 1,        # ---,              maximum state of charge
+                       "soc_min": 0,        # ---,              minimum state of charge
+                       "life_time": 20,     # a,                operation time (VDI 2067 Trinkwasserspeicher)
+                       "cost_om": 0.02,     # ---,              annual operation and maintenance costs as share of investment (VDI 2067 Trinkwasserspeicher)
+                       }
+        
+        devs["TES"]["cap_i"] =   { 0: 0,         # MWh_th,      depends on temperature difference! Q = V * c_p * rho * dT
+                                   1: 8.128,     # MWh_th       PRÜFEN!!!!!
+                                   2: 40.639,    # MWh_th
+                                   3: 243.833    # MWh_th
+                                   }
+        
+        devs["TES"]["inv_i"] = {    0: 0,              # kEUR
+                                    1: 147.2,          # kEUR,    includes factor of 1.15 for pressure correction factor due to high temperatures; higher pressure is needed to prevent evaporation
+                                    2: 410.55,         # kEUR       PRÜFEN!!!!
+                                    3: 1083.3          # kEUR
+                                    } 
     
     
     
@@ -479,7 +507,7 @@ def get_edge_dict(n, nodes):
 #%%
 def transform_coordinates(nodes):
     outProj = Proj(init='epsg:25832')   # ETRS89 / UTM zone 32N
-    inProj = Proj(init='epsg:4258')     # Geographic coordinate system: EPSG 4326
+    inProj = Proj(init='epsg:4258')     # Geographic coordinate system: EPSG 4258 (Europe)
     
     # get x- and y- coordinates and find minimal values of each
     min_x, min_y = transform(inProj,outProj,nodes[0]["lon"],nodes[0]["lat"])
@@ -554,6 +582,8 @@ def calc_annual_investment(devs, devs_dom, param):
         
         # Get device life time
         life_time = devs_dom[device]["life_time"]
+        inv_fix = devs_dom[device]["inv_fix"]
+        inv_var = devs_dom[device]["inv_var"]
 
         # Number of required replacements
         n = int(math.floor(observation_time / life_time))
@@ -566,9 +596,11 @@ def calc_annual_investment(devs, devs_dom, param):
 
         # Calculate annualized investments       
         if life_time > observation_time:
-            devs_dom[device]["ann_factor"] = (1 - res_value) * CRF
+            devs_dom[device]["ann_inv_fix"] = inv_fix * (1 - res_value) * CRF
+            devs_dom[device]["ann_inv_var"] = inv_var * (1 - res_value) * CRF
         else:
-            devs_dom[device]["ann_factor"] = ( 1 + invest_replacements - res_value) * CRF 
+            devs_dom[device]["ann_inv_fix"] = inv_fix * ( 1 + invest_replacements - res_value) * CRF 
+            devs_dom[device]["ann_inv_var"] = inv_var * ( 1 + invest_replacements - res_value) * CRF
             
     
     # Distribution devices (pipes, pumps)

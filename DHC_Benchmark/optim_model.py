@@ -15,7 +15,7 @@ import json
 import time
 import numpy as np
 
-def run_optim(obj_fn, obj_eps, eps_constr, dir_results):
+def run_optim(obj_fn, obj_eps, eps_constr, dir_results,twp):
 
     assert (obj_eps == "" and eps_constr == "") or (obj_eps != "" and eps_constr != ""), "If there is a bounded objective function, an epsilon constraint should be given."
     
@@ -23,7 +23,7 @@ def run_optim(obj_fn, obj_eps, eps_constr, dir_results):
     # Load model parameter
     start_time = time.time()
     
-    (devs, param, dem) = parameter.load_params()
+    (devs, param, dem) = parameter.load_params(twp)
     
           
     time_steps = range(8760)

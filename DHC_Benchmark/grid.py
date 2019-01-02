@@ -385,7 +385,7 @@ def get_T_supply(param):
 #%%
 def transform_coordinates(nodes):
     outProj = Proj(init='epsg:25832')   # ETRS89 / UTM zone 32N
-    inProj = Proj(init='epsg:4258')     # Geographic coordinate system: EPSG 4326
+    inProj = Proj(init='epsg:4258')     # Geographic coordinate system: EPSG 4258 (Europe)
     
     # get x- and y- coordinates and find minimal values of each
     min_x, min_y = transform(inProj,outProj,nodes[0]["lon"],nodes[0]["lat"])
@@ -397,9 +397,9 @@ def transform_coordinates(nodes):
             min_y = nodes[n]["y"]
     
     # Shift coordinate system by minimal x- and y- value        
-    for n in range(len(nodes)):
-        nodes[n]["x"] = nodes[n]["x"] - min_x
-        nodes[n]["y"] = nodes[n]["y"] - min_y
+#    for n in range(len(nodes)):
+#        nodes[n]["x"] = nodes[n]["x"] - min_x
+#        nodes[n]["y"] = nodes[n]["y"] - min_y
         
     return nodes
 

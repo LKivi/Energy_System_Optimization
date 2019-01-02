@@ -19,7 +19,7 @@ def design_balancing_unit(nodes, devs, param, residual, dir_results):
     residual["heat"] += param["heat_losses"]
     residual["cool"] += param["cool_losses"]
     
-    # Correct negative values
+    # Set negative values to 0
     for t in time_steps:
         if residual["heat"][t] < 0:
             residual["heat"][t] = 0

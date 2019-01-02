@@ -132,7 +132,7 @@ def load_params():
     else:
         T_heating_return = 30
     
-    param_temperatures = {"T_heating_supply_low": 50,
+    param_temperatures = {"T_heating_supply_low": 60,
                           "T_heating_return": T_heating_return,      # °C,   heating return temperature
                           "T_cooling_supply": 6,                     # °C,   cooling supply temperature
                           "T_cooling_return": 12}                    # °C,   cooling return temperature
@@ -265,7 +265,7 @@ def load_params():
                   "life_time": 20,       # a,    operation time (VDI 2067)
                   "cost_om": 0.025,      #---,   annual operation and maintenance as share of investment (VDI 2067)
                   "dT_evap": 6,          # K,    temperature difference of water in evaporator
-                  "dT_cond": 15,          # K,    temperature difference of water in condenser
+                  "dT_cond": 20,          # K,    temperature difference of water in condenser
                   "eta_compr": 0.8,     # ---,  isentropic efficiency of compression
                   "heatloss_compr": 0.1,  # ---,  heat loss rate of compression
                   "COP_max": 7,
