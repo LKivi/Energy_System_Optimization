@@ -42,21 +42,24 @@ start_time_procedure = time.time()
 #devs, param, dem = p.load_params()
 
 #tac = []
-#COP = []
+COP = []
 #dt = []
 
 
 
 
 #for twp in np.arange(31) + 0.0001 :
+#
+#
 
+#for dt_pp in np.arange(1,5,1):
 
 devs, param, dem = p.load_params()
     
 #    dt_hp = devs["HP"]["dT_cond"]
 #    COP_hp = devs["HP"]["COP"]
-#    
-#    dt.append(dt_hp)
+##    
+##    dt.append(dt_hp)
 #    COP.append(COP_hp)
 #    
 #    # Create result directory
@@ -71,15 +74,16 @@ devs, param, dem = p.load_params()
 #    
 #    
 #    tac.append(tac_opt)
-#    
+##    
 #    
 #
 #
 ###plt.plot(dt, COP)
-###plt.plot(dt,tac)
-##    
+####plt.plot(dt,tac)
+###    
 #b = COP
-#    
+## 
+#plt.plot(np.arange(1,5,1), b)   
 #plt.show()
 
 

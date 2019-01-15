@@ -18,7 +18,8 @@ import grid
 def calculateLosses(param, data):
     
     
-    T_soil = calculateSoilTemperature(param)
+#    T_soil = calculateSoilTemperature(param)
+    T_soil = np.loadtxt(open("input_data/soil_temperatures.txt", "rb"), delimiter = ",", usecols=(0))  
     
     losses = {}
 
@@ -61,6 +62,9 @@ def calculateLosses(param, data):
                  d/2 * 1/param["lambda_soil"] * np.log((4*(param["grid_depth"] + param["R_0"]*param["lambda_soil"]))/(d+2*t1+2*t2+2*t3))) ** (-1)   # thermal restistance soil 
                 
         losses["heating_grid"] = losses["heating_grid"] + k*np.pi*d*L*((T_supply - T_soil) + (param["T_heating_return"] - T_soil)) / 1e6
+        
+#        print(sum(losses["heating_grid"][t] for t in range(8760)))
+        
 
 
     #%% COOLING GRID LOSSES  
@@ -160,11 +164,11 @@ def calculateSoilTemperature(param):
     # get ground parameters
     omega = 2*np.pi/365
     
-    if param["asphaltlayer"] == 0:       # no asphalt layer, only soil
-        alpha_s = param["alpha_soil"]
-        epsilon_s = param["epsilon_soil"]
-        f = param["evaprate_soil"]
-        k = param["lambda_soil"]
+    if param["asphaltlayer"] == 0:           # no asphalt layer, only soil
+        alpha_s = param["alpha_soil"]        # surface absorptance   
+        epsilon_s = param["epsilon_soil"]    # surface emissivity
+        f = param["evaprate_soil"]           # surface evaporation rate
+        k = param["lambda_soil"]             # surface heat conductivity
         delta_s = (2*(k/param["heatcap_soil"]*3600*24)/omega)**0.5        # m,  surface damping depth
         delta_soil = delta_s
     else:                               # with asphalt layer at surface
@@ -181,6 +185,7 @@ def calculateSoilTemperature(param):
     # long-wave radiation heat transfer
     alpha_rad = epsilon_s * 5.67e-8 * (Ts_mean + 273.15 + Tsky_mean + 273.15) * ((Ts_mean + 273.15)**2 + (Tsky_mean + 273.15)**2)
     
+    # interim varaibles according to the model
     h_e = alpha_conv*(1+103*0.0168*f) + alpha_rad
     h_r = alpha_conv*(1+103*0.0168*f*r)
     
@@ -188,12 +193,13 @@ def calculateSoilTemperature(param):
     denom = (h_e+k*((1+1j)/delta_s))
     z = num/denom
     
+    # Amplitude and phase angle of surface temperature
     Ts_amp = abs(z)
     Ts_phase = Tair_phase + cmath.phase(z)       
  
     # Calculate soil temperature in grid depth
-    d = param["d_asph"] 
-    t = param["grid_depth"]
+    d = param["d_asph"]         # asphalt layaer thickness
+    t = param["grid_depth"]     # grid installation depth
     omega = 2*np.pi/365/24
     time = np.arange(1,8761)
    

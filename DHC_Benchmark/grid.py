@@ -16,7 +16,7 @@ import networkx as nx
 # Design grid properties for the given parameters
 def design_grid(param):
  
-    # available standard pipe inner diameters (heating pipes: ISO 4200 / Set Pipes GmbH; cooling pipes: SDR11, PN16)
+    # available standard pipe inner diameters (heating pipes: ISO 4200 / Set Pipes GmbH; cooling pipes: SDR17, PN10)
     param["diameters"] = {}
     path_heating = "input_data/pipes_heating.txt"
     path_cooling = "input_data/pipes_cooling.txt"
@@ -31,6 +31,7 @@ def design_grid(param):
     
     grid_types = ["heating", "cooling"]
     
+    # calculate pipe diameters for heating and cooling grid
     for typ in grid_types:
         
         for edge in data["edges"]:
@@ -426,6 +427,7 @@ def design_pump(data, param, dem_buildings):
            
     # Calculate pressure loss on every path at maximum load and find the path with maximum pressure loss and calculate pump capacities
     pump_caps = {}
+    # Size pump for heating and cooling grid
     for typ in ["heating", "cooling"]:
         pressure_losses = []
         for destination in dict_lengths:
@@ -435,7 +437,7 @@ def design_pump(data, param, dem_buildings):
             pressure_losses.append(dp)
         dp_max = max(pressure_losses)
       
-        # find edge at supply unit to get mass flow through pump
+        # find edge at supply unit to get total mass flow through pump
         for e in data["edges"]:
             n1 = data["edges"][e]["node_ids"][0]
             n2 = data["edges"][e]["node_ids"][1]

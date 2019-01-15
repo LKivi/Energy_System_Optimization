@@ -15,7 +15,7 @@ import json
 import time
 import numpy as np
 
-def run_optim(obj_fn, obj_eps, eps_constr, dir_results,twp):
+def run_optim(obj_fn, obj_eps, eps_constr, dir_results):
 
     assert (obj_eps == "" and eps_constr == "") or (obj_eps != "" and eps_constr != ""), "If there is a bounded objective function, an epsilon constraint should be given."
     
@@ -23,7 +23,7 @@ def run_optim(obj_fn, obj_eps, eps_constr, dir_results,twp):
     # Load model parameter
     start_time = time.time()
     
-    (devs, param, dem) = parameter.load_params(twp)
+    (devs, param, dem) = parameter.load_params()
     
           
     time_steps = range(8760)
@@ -85,6 +85,15 @@ def run_optim(obj_fn, obj_eps, eps_constr, dir_results,twp):
         for t in time_steps:
             cool[device][t] = model.addVar(vtype="C", name="cool_" + device + "_t" + str(t))
             
+    inv = {}
+    c_inv = {}
+    c_om = {}
+    for device in all_devs:
+        inv[device] = model.addVar(vtype = "C", name="investment_costs_" + device)
+        c_inv[device] = model.addVar(vtype = "C", name="annual_investment_costs_" + device)
+        c_om[device] = model.addVar(vtype = "C", name="om_costs_" + device)
+        
+    
     if param["switch_transient_hp"]:
         dt_hp = {}
         ratio = {}
@@ -328,19 +337,16 @@ def run_optim(obj_fn, obj_eps, eps_constr, dir_results,twp):
     model.addConstr(to_grid_total == sum(power["to_grid"][t] for t in time_steps))
 
     # total investment costs
-    inv = {}
     for device in all_devs:
-        inv[device] = sum(lin[device][i] * devs[device]["inv_i"][i] for i in range(len(devs[device]["cap_i"]))) 
+        model.addConstr( inv[device] == sum(lin[device][i] * devs[device]["inv_i"][i] for i in range(len(devs[device]["cap_i"]))) )
 
     # Annual investment costs
-    c_inv = {}
     for device in all_devs:
-        c_inv[device] = inv[device] * devs[device]["ann_factor"]
+        model.addConstr( c_inv[device] == inv[device] * devs[device]["ann_factor"] )
     
     # Operation and maintenance costs
-    c_om = {}
     for device in all_devs:       
-        c_om[device] = devs[device]["cost_om"] * inv[device]
+        model.addConstr( c_om[device] == devs[device]["cost_om"] * inv[device] )
         
     # Total generated electrial energy
     generation_total = sum(power["CHP"][t] for t in time_steps)
@@ -422,9 +428,9 @@ def save_results(devs, param, dem, model, obj_fn, obj_eps, eps_constr, dir_resul
     devs["CC"]["COP"] = devs["CC"]["COP"].tolist()
     
     # Write model parameter in json-file
-#    all_param = {**param, **devs}
-#    with open(dir_results + "\parameter.json", "w") as outfile:
-#        json.dump(all_param, outfile, indent=4, sort_keys=True)
+    all_param = {**param, **devs}
+    with open(dir_results + "\parameter.json", "w") as outfile:
+        json.dump(all_param, outfile, indent=4, sort_keys=True)
 
     # Write Gurobi files
     model.write(dir_results + "\model.lp")

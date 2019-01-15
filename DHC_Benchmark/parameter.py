@@ -42,7 +42,7 @@ def load_params():
     
     param_switches = {"switch_low_temp": 1,             # 1: low-temperature heating 0: heating temperature according to real data from FZ Jülich
                       "switch_n_1": 0,                  # consider n-1 redundancy of heating and cooling generation
-                      "switch_hp": 1,                    # consider heat pump between cooling and heating return pipes
+                      "switch_hp": 1,                    # consider heat pump between cooling and heating return pipes?
                       "switch_transient_hp": 0,          # consider variable heat pump outlet temperature
                       "switch_pump": 0                   # consider pumping costs
                       }
@@ -132,7 +132,7 @@ def load_params():
     else:
         T_heating_return = 30
     
-    param_temperatures = {"T_heating_supply_low": 60,
+    param_temperatures = {"T_heating_supply_low": 60,                # °C,   supply temperature in case of low-temperature heating network
                           "T_heating_return": T_heating_return,      # °C,   heating return temperature
                           "T_cooling_supply": 6,                     # °C,   cooling supply temperature
                           "T_cooling_return": 12}                    # °C,   cooling return temperature
@@ -168,7 +168,8 @@ def load_params():
 #    print(param["load_factor_heating"])
 #    print(param["load_factor_cooling"])
     
-
+#    print(sum(dem["heat"][t] for t in range(8760)))
+#    print(sum(dem["cool"][t] for t in range(8760)))
 
 #    print(param["max_heating"])
 #    print(param["max_cooling"])
@@ -193,11 +194,15 @@ def load_params():
     # calculate heating and cooling losses of the grid
     losses = soil.calculateLosses(param, grid_data)
     
+    print(sum(losses["cooling_grid"][t] for t in range(8760)))
+          
     # Add losses to building demands to get total grid demand
     dem["heat"] = dem["heat"] + losses["heating_grid"]
     dem["cool"] = dem["cool"] + losses["cooling_grid"]
   
-    
+
+#    print(max(dem["heat"][t] for t in range(8760)))    
+#    print(max(dem["cool"][t] for t in range(8760))) 
     
 #    time_max = np.argmax(dem["heat"])
 #    time_max2 = np.argmax(dem["cool"])
@@ -228,6 +233,7 @@ def load_params():
                    }
     
     
+    # Piece-wise linear cost function
     devs["BOI"]["cap_i"] =  {  0: 0,        # MW_th 
                                1: 0.5,      # MW_th
                                2: 5         # MW_th
@@ -246,6 +252,7 @@ def load_params():
                    "cost_om": 0.08,     # ---,           annual operation and maintenance costs as share of investment (VDI 2067)
                    }   
     
+    # Piece-wise linear cost function
     devs["CHP"]["cap_i"] =  {  0: 0,        # MW_el
                                1: 0.25,     # MW_el
                                2: 1,        # MW_el
@@ -261,22 +268,24 @@ def load_params():
 
     #%% WATER SOURCE HEAT PUMP
     devs["HP"] = {
-                  "dT_pinch": 2,         # K,    temperature difference between heat exchanger sides at pinch point
-                  "life_time": 20,       # a,    operation time (VDI 2067)
-                  "cost_om": 0.025,      #---,   annual operation and maintenance as share of investment (VDI 2067)
-                  "dT_evap": 6,          # K,    temperature difference of water in evaporator
-                  "dT_cond": 20,          # K,    temperature difference of water in condenser
-                  "eta_compr": 0.8,     # ---,  isentropic efficiency of compression
-                  "heatloss_compr": 0.1,  # ---,  heat loss rate of compression
-                  "COP_max": 7,
+                  "dT_pinch": 2,           # K,    temperature difference between heat exchanger sides at pinch point
+                  "life_time": 20,         # a,    operation time (VDI 2067)
+                  "cost_om": 0.025,        #---,   annual operation and maintenance as share of investment (VDI 2067)
+                  "dT_evap": 6,            # K,    temperature difference of water in evaporator
+                  "dT_cond": 20,           # K,    temperature difference of water in condenser
+                  "eta_compr": 0.8,        # ---,  isentropic efficiency of compression
+                  "heatloss_compr": 0.1,   # ---,  heat loss rate of compression
+                  "COP_max": 7,            # ---,  maximum heat pump COP
                   "lin_error": 0.001       # ---, tolerance for COP-linearization error
                   }
  
+    # Calculate heat pump COP
     if param["switch_transient_hp"] == 0:
         devs["HP"]["COP"] = calc_COP(devs, param, "HP",devs["HP"]["dT_cond"])
     else:
         devs = lin_COP_HP(param, devs)
     
+    # Piece-wise linear cost function
     devs["HP"]["cap_i"] =   {  0: 0,        # MW_th
                                1: 0.5,      # MW_th
                                2: 4         # MW_th
@@ -296,47 +305,51 @@ def load_params():
                   "cost_om": 0.03,      # ---,        annual operation and maintenance costs as share of investment (VDI 2067)
                   }
     
+    # Piece-wise linear cost function
     devs["AC"]["cap_i"] =   {  0: 0,        # MW_th
                                1: 0.25,     # MW_th
                                2: 1.535,    # MW_th
                                3: 5.115     # MW_th
                                }
     
-    devs["AC"]["inv_i"] = {     0: 0,           # kEUR
-                                1: 135.9,       # kEUR
+    devs["AC"]["inv_i"] = {     0: 0,         # kEUR
+                                1: 135.9,     # kEUR
                                 2: 366.3,     # kEUR
                                 3: 802        # kEUR
                                 } 
 
     #%% COMPRESSION CHILLER
     devs["CC"] = {
-                  "life_time": 15,      # a,               operation time (VDI 2067)
-                  "cost_om": 0.035,     # ---,             annual operation and maintenance costs as share of investment (VDI 2067)
-                  "dT_cond": 5,
-                  "dT_min_cooler": 10,
-                  "dT_pinch": 2,
-                  "eta_compr": 0.75,     # ---,            isentropic efficiency of compression
-                  "heatloss_compr": 0.1,  # ---,           heat loss rate of compression 
-                  "COP_max": 6
+                  "life_time": 15,          # a,               operation time (VDI 2067)
+                  "cost_om": 0.035,         # ---,             annual operation and maintenance costs as share of investment (VDI 2067)
+                  "dT_cond": 5,             # K,               temperature difference of water in condenser
+                  "dT_min_cooler": 10,      # K,               minimal temperature difference between cooling water and air 
+                  "dT_pinch": 2,            # K,               temperature difference between heat exchanger sides at pinch point 
+                  "eta_compr": 0.75,        # ---,             isentropic efficiency of compression
+                  "heatloss_compr": 0.1,    # ---,             heat loss rate of compression 
+                  "COP_max": 6              # ---,             maximum compression chiller COP
                   }
     
+    # In the heat pump system the CC COP is calculated for the worst case in which the heat pump supplies all cooling load
     if param["switch_hp"]:
         devs["CC"]["dT_evap"] = 1e-5
     else:
         devs["CC"]["dT_evap"] = param["T_cooling_return"] - param["T_cooling_supply"]
     
     
+    # Calculate compression chiller COPs 
     devs["CC"]["COP"] = calc_COP(devs, param, "CC", devs["CC"]["dT_cond"])
     
     
+    # Piece-wise linear cost function
     devs["CC"]["cap_i"] = { 0: 0,       # MW_th
                             1: 0.5,     # MW_th
                             2: 4        # MW_th
                             }
     
     
-    devs["CC"]["inv_i"] = { 0: 0,         # kEUR
-                            1: 95,     # kEUR
+    devs["CC"]["inv_i"] = { 0: 0,       # kEUR
+                            1: 95,      # kEUR
                             2: 501      # kEUR
                             } 
     
@@ -518,7 +531,7 @@ def calc_annual_investment(devs, param, grid_data, dem_buildings):
     """
     Calculation of total investment costs including replacements and residual value (based on VDI 2067-1, pages 16-17).
     
-    Annuity factor is returned.
+    Annuity factors of generation devices are returned.
     Total annualized costs of distribution devices are returned.
     
     """
@@ -530,7 +543,8 @@ def calc_annual_investment(devs, param, grid_data, dem_buildings):
     # Calculate capital recovery factor
     CRF = ((q**observation_time)*interest_rate)/((q**observation_time)-1)
 
-    # Calculate annuity factor for each device
+ 
+    # Calculate annuity factor for generation devices
     for device in devs.keys():
         
         # Get device life time
@@ -566,7 +580,7 @@ def calc_annual_investment(devs, param, grid_data, dem_buildings):
         length = length + grid_data["edges"][item]["length"]
         d_h = grid_data["edges"][item]["diameter_heating"]
         d_c = grid_data["edges"][item]["diameter_cooling"]
-        # binary variables to check if a pipe is needed at this edge
+        # binary variables to check if a pipe is needed at this edge (some buildings don't have cooling demand)
         x_h = d_h > 0
         x_c = d_c > 0 
         inv_pipes = inv_pipes + ((x_h or x_c) * 0.5 * param["inv_ground"] + x_h * (param["inv_pipe_isolated_fix"] + param["inv_pipe_isolated"] * d_h**2) + x_c * param["inv_pipe_PE"] * d_c**2) * 2 * grid_data["edges"][item]["length"]
@@ -586,7 +600,6 @@ def calc_annual_investment(devs, param, grid_data, dem_buildings):
     param["length_pipes"] = length                                                                           # m,        one-way length of heating network
 
 
-   # print("rohre " + str(param["tac_pipes"]))
     
 
     # substation costs
@@ -612,7 +625,6 @@ def calc_annual_investment(devs, param, grid_data, dem_buildings):
     else:
         param["tac_subs"] = (CRF * inv_subs * (1 + invest_replacements - res_value) + param["cost_om_sub"] * inv_subs)
     
-   # print("subs " + str(param["tac_subs"]))
 
     
     
@@ -687,7 +699,7 @@ def calc_COP(devs, param, device, dt_h):
         t_air = np.loadtxt(open("input_data/weather.csv", "rb"), delimiter = ",",skiprows = 1, usecols=(0))               # Air temperature °C
         t_h_in = t_air + devs["CC"]["dT_min_cooler"] + 273.15                                                             # heat sink inlet temperature (cold cooling water)
         if param["switch_hp"]:
-            t_c_in = param["T_cooling_supply"] + 273.15                                                                       # heat source inlet temperature (safe )
+            t_c_in = param["T_cooling_supply"] + 273.15                                                                   # heat source inlet temperature
         else:
             t_c_in = param["T_cooling_return"] + 273.15
             
@@ -747,6 +759,7 @@ def calc_COP(devs, param, device, dt_h):
 
 
 #%%
+# COP linearization in case of variable heat pump supply temperatures
 def lin_COP_HP(param, devs):
     
 #    t_supply_max = np.max(param["T_heating_supply"])
