@@ -9,6 +9,7 @@ import numpy as np
 import bldg_balancing_heur as heur
 import bldg_balancing_optim_nodewise as opt
 import bldg_balancing_optim_complete as opt_compl
+import bldg_balancing_optim_complete_clustered as opt_compl_clustered
 
 
 # Calculate mass flow through building (intra-balancing): "> 0": flow from supply to return pipe   
@@ -30,12 +31,16 @@ def design_buildings(nodes, param, devs, devs_dom, dir_results):
         
         else:
             
-            nodes, param = opt_compl.run(nodes, param, devs, devs_dom, dir_buildings)
+            if param["switch_clustering"]:
+                nodes, param = opt_compl_clustered.run(nodes, param, devs, devs_dom, dir_buildings)
+            else:
+                nodes, param = opt_compl.run(nodes, param, devs, devs_dom, dir_buildings)
+            
             
             
     
-        
-    residual = get_residual(nodes)
+    residual = 0 
+#    residual = get_residual(nodes)
     
     
     return nodes, residual

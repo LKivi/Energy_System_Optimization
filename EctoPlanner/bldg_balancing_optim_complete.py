@@ -143,9 +143,6 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
     
     # total energy amounts taken from grid and fed into grid
     from_grid_total = model.addVar(vtype = "C", name="from_grid_total")
-    to_grid_BU = model.addVar(vtype = "C", name="to_grid_BU")
-    # PV-generated power to grid
-    to_grid_buildings = model.addVar(vtype = "C", name="to_grid_buildings")
     # total power to grid
     to_grid_total = model.addVar(vtype = "C", name="to_grid_total")
     gas_total = model.addVar(vtype = "C", name="gas_total")
@@ -210,7 +207,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
     
     # Eletrical power to/from devices
     power_dom = {}
-    for device in ["HP", "CC", "EH", "PV", "to_grid"]:
+    for device in ["HP", "CC", "EH", "PV"]:
         power_dom[device] = {}
         for n in nodes:
             power_dom[device][n] = {}
@@ -270,13 +267,11 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
     m_free = {}
     m_air = {}
     m_rest = {}
-    air_cooler_max = {}
     for n in nodes:
         m_cooling[n] = {}
         m_free[n] = {}
         m_air[n] = {}
         m_rest[n] = {}
-        air_cooler_max[n] = {}
         for t in time_steps:
             m_cooling[n][t] = model.addVar(vtype = "C", name="mass_flow_cooling_n" + str(n) + "_t" + str(t))
         for t in time_steps:
@@ -285,8 +280,6 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
             m_air[n][t] = model.addVar(vtype = "C", name="mass_flow_air_cooler_n" + str(n) + "_t" + str(t))
         for t in time_steps:
             m_rest[n][t] = model.addVar(vtype = "C", name="mass_flow_rest_n" + str(n) + "_t" + str(t))
-        for t in time_steps:
-            air_cooler_max[n][t] = model.addVar(vtype = "C", name="blablablab" + str(n) + "_t" + str(t))
 
                     
     
@@ -385,8 +378,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
     for n in nodes:
         for device in ["TES"]:
             for t in time_steps:    
-                    model.addConstr(soc_dom[device][n][t] <= devs_dom[device]["soc_max"] * cap_dom[device][n])
-                    model.addConstr(soc_dom[device][n][t] >= devs_dom[device]["soc_min"] * cap_dom[device][n])  
+                    model.addConstr(soc_dom[device][n][t] <= cap_dom[device][n]) 
     
     for n in nodes:  
         for t in time_steps:
@@ -436,8 +428,8 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
             # Cooling balance
             model.addConstr(cool_dom["CC"][n][t] + cool_dom["free_cooler"][n][t] + cool_dom["air_cooler"][n][t] == nodes[n]["cool"][t] ) 
             
-            # Electricity balance
-            model.addConstr( power_dom["PV"][n][t] + res_el[n][t] == power_dom["EH"][n][t] + power_dom["HP"][n][t] + power_dom["CC"][n][t] + power_dom["to_grid"][n][t] )
+            # Electricity demands
+            model.addConstr(res_el[n][t] == power_dom["EH"][n][t] + power_dom["HP"][n][t] + power_dom["CC"][n][t])
             
     
     #%% BUILDING THERMAL STORAGES
@@ -449,20 +441,12 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
             # Cyclic condition
             model.addConstr(soc_dom[device][n][len(time_steps)] == soc_dom[device][n][0])
         
-            for t in range(len(time_steps)+1):
-                
-                if t == 0:
-                    # Set initial state of charge
-                    model.addConstr(soc_dom[device][n][0] <= cap_dom[device][n] * devs_dom[device]["soc_init"])
-                else:
-                    # Energy balance: soc(t) = soc(t-1) + charge - discharge
-                    model.addConstr(soc_dom[device][n][t] == soc_dom[device][n][t-1] * (1-devs_dom[device]["sto_loss"])
-                        + (ch_dom[device][n][t-1] * devs_dom[device]["eta_ch"] 
-                        - dch_dom[device][n][t-1] / devs_dom[device]["eta_dch"]))
-                    
-                    # charging power <= maximum charging power and discharging power <= maximum discharging power 
-                    model.addConstr(ch_dom[device][n][t-1] <= devs_dom[device]["max_ch"])
-                    model.addConstr(dch_dom[device][n][t-1] <= devs_dom[device]["max_dch"])   
+            for t in np.arange(1,len(time_steps)+1):
+                # Energy balance: soc(t) = soc(t-1) + charge - discharge
+                model.addConstr(soc_dom[device][n][t] == soc_dom[device][n][t-1] * (1-devs_dom[device]["sto_loss"])
+                    + (ch_dom[device][n][t-1] * devs_dom[device]["eta_ch"] 
+                    - dch_dom[device][n][t-1] / devs_dom[device]["eta_dch"]))
+                      
             
 
     #%% FREE COOLING AND AIR COOLING RESTRICTIONS
@@ -571,12 +555,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
     for t in time_steps:    
         model.addConstr(residual["heat"][t] == sum(res_heat[n][t] for n in nodes) / 1000)
     for t in time_steps:   
-        model.addConstr(residual["cool"][t] == sum(res_cool[n][t] for n in nodes) / 1000)
-        
-    
-    # PV power to grid
-    model.addConstr(to_grid_buildings == sum(sum(power_dom["to_grid"][n][t] for n in nodes) for t in time_steps) / 1000 )
-        
+        model.addConstr(residual["cool"][t] == sum(res_cool[n][t] for n in nodes) / 1000)      
                 
     # Gas supply for building boilers
     for t in time_steps:
@@ -603,8 +582,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
     
     for device in ["TES", "CTES"]:
         for t in time_steps:    
-                model.addConstr(soc[device][t] <= devs[device]["soc_max"] * cap[device])
-                model.addConstr(soc[device][t] >= devs[device]["soc_min"] * cap[device])         
+                model.addConstr(soc[device][t] <= cap[device])     
         
     for t in time_steps:
         for device in ["BOI", "HP", "EH"]:
@@ -662,22 +640,11 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
     
         if step == 1:
     
-            for t in range(len(time_steps)+1):
-                
-                if t == 0:
-                    # Set initial state of charge
-                    model.addConstr(soc[device][0] <= cap[device] * devs[device]["soc_init"])
-                else:
-                    # Energy balance: soc(t) = soc(t-1) + charge - discharge
-                    model.addConstr(soc[device][t] == soc[device][t-1] * (1-devs[device]["sto_loss"])
-                        + (ch[device][t-1] * devs[device]["eta_ch"] 
-                        - dch[device][t-1] / devs[device]["eta_dch"]))
-                    
-                    # charging power <= maximum charging power and discharging power <= maximum discharging power 
-                    model.addConstr(ch[device][t-1] <= devs[device]["max_ch"])
-                    model.addConstr(dch[device][t-1] <= devs[device]["max_dch"])
-                    
-    
+            for t in np.arange(1,len(time_steps)+1):
+                # Energy balance: soc(t) = soc(t-1) + charge - discharge
+                model.addConstr(soc[device][t] == soc[device][t-1] * (1-devs[device]["sto_loss"])
+                    + (ch[device][t-1] * devs[device]["eta_ch"] 
+                    - dch[device][t-1] / devs[device]["eta_dch"]))
        
         
         if step == 2:
@@ -685,8 +652,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
             for t in range(len(time_steps)+1):        
                 
                 if t == 0:
-                    # Set initial state of charge
-                    model.addConstr(soc[device][0] <= cap[device] * devs[device]["soc_init"])
+                    # initial state of charge
                     model.addConstr(soc[device][0] <= x[device][0] * devs[device]["max_cap"])
                     model.addConstr(soc[device][0] >= x[device][0] * devs[device]["min_cap"])
                     
@@ -701,9 +667,6 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
                     model.addConstr(soc[device][t] <= x[device][t] * devs[device]["max_cap"])
                     model.addConstr(soc[device][t] >= x[device][t] * devs[device]["min_cap"])
                     
-                    # charging power <= maximum charging power and discharging power  
-                    model.addConstr(ch[device][t-1] <= x[device][t] * devs[device]["max_ch"])
-                    model.addConstr(dch[device][t-1] <= x[device][t] * devs[device]["max_dch"])
                     
             
    
@@ -716,7 +679,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
 
     for t in time_steps:
         # Electricity balance
-        model.addConstr(power["CHP"][t] + power["from_grid"][t] == residual["power"][t] + power["to_grid"][t] + power["CC"][t] + power["HP"][t] + power["EH"][t] )
+        model.addConstr(power["CHP"][t] + sum(power_dom["PV"][n][t] for n in nodes) / 1000 +  power["from_grid"][t] == residual["power"][t] + power["to_grid"][t] + power["CC"][t] + power["HP"][t] + power["EH"][t] )
 
     for t in time_steps:
         # Cooling balance
@@ -752,8 +715,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
     model.addConstr(gas_total == sum(sum(gas[device][t] for t in time_steps) for device in ["BOI", "CHP", "to_buildings"]))
   
     model.addConstr(from_grid_total == sum(power["from_grid"][t] for t in time_steps))
-    model.addConstr(to_grid_BU == sum(power["to_grid"][t] for t in time_steps))
-    model.addConstr(to_grid_total == to_grid_BU + to_grid_buildings)
+    model.addConstr(to_grid_total == sum(power["to_grid"][t] for t in time_steps))
 #    from_DH_total = sum(heat["from_DH"][t] for t in time_steps)
 #    from_DC_total = sum(cool["from_DC"][t] for t in time_steps)
     
@@ -779,8 +741,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
                                     + sum(tac_building[n] for n in nodes)   
                                     + gas_total * param["price_gas"] + grid_limit_gas * param["price_cap_gas"]
                                     + from_grid_total * param["price_el"] + grid_limit_el * param["price_cap_el"]     # grid electricity costs
-                                    - to_grid_BU * param["revenue_feed_in"]["CHP"]
-                                    - to_grid_buildings * param["revenue_feed_in"]["PV"]
+                                    - to_grid_total * param["revenue_feed_in"]
                                     , "sum_up_TAC")
                                     
         

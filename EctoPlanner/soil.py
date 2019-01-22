@@ -17,7 +17,8 @@ import cmath
 def calculate_thermal_losses(param, pipe_data):
     
     
-    T_soil = calculate_soil_temperature(param)
+#    T_soil = calculate_soil_temperature(param)
+    T_soil = np.loadtxt(open("input_data/soil_temperatures.txt", "rb"), delimiter = ",", usecols=(0))
     
     losses = {}
     losses["heat"] = np.zeros(8760)
