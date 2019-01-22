@@ -534,14 +534,14 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
             for d in days:
                             
                 # Initial state of charge
-                model.addLConstr(soc_dom[device][n][d][0], gp.GRB.EQUAL, soc_dom_init[device][n])
+                model.addConstr(soc_dom[device][n][d][0] <= soc_dom_init[device][n])
                 
                 # Cyclic condition
-                model.addLConstr(soc_dom[device][n][d][len(time_steps)], gp.GRB.EQUAL, soc_dom[device][n][d][0])
+                model.addConstr(soc_dom[device][n][d][len(time_steps)] <= soc_dom[device][n][d][0])
             
                 for t in np.arange(1,len(time_steps)+1):
                     # Energy balance: soc(t) = soc(t-1) + charge - discharge
-                    model.addLConstr(soc_dom[device][n][d][t], gp.GRB.EQUAL, soc_dom[device][n][d][t-1] * (1-devs_dom[device]["sto_loss"])
+                    model.addConstr(soc_dom[device][n][d][t] <= soc_dom[device][n][d][t-1] * (1-devs_dom[device]["sto_loss"])
                         + (ch_dom[device][n][d][t-1] * devs_dom[device]["eta_ch"] 
                         - dch_dom[device][n][d][t-1] / devs_dom[device]["eta_dch"]))
             
@@ -1050,7 +1050,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
             
     
             # Run Post Processing
-            post.run(dir_results, param, nodes)
+           # post.run(dir_results, param, nodes)
             
             # Building plots
  #           for n in nodes:

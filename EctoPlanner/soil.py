@@ -6,7 +6,7 @@ Created on Wed Oct 10 16:13:13 2018
 """
 
 import numpy as np
-from scipy.optimize import leastsq
+#from scipy.optimize import leastsq
 import cmath
 
 
