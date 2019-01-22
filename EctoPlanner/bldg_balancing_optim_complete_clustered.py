@@ -534,7 +534,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
             for d in days:
                             
                 # Initial state of charge
-                model.addConstr(soc_dom[device][n][d][0] <= soc_dom_init[device][n])
+                model.addConstr(soc_dom[device][n][d][0] == soc_dom_init[device][n])
                 
                 # Cyclic condition
                 model.addConstr(soc_dom[device][n][d][len(time_steps)] == soc_dom[device][n][d][0])
