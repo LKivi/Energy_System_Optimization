@@ -537,11 +537,11 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
                 model.addConstr(soc_dom[device][n][d][0] <= soc_dom_init[device][n])
                 
                 # Cyclic condition
-                model.addConstr(soc_dom[device][n][d][len(time_steps)] <= soc_dom[device][n][d][0])
+                model.addConstr(soc_dom[device][n][d][len(time_steps)] == soc_dom[device][n][d][0])
             
                 for t in np.arange(1,len(time_steps)+1):
                     # Energy balance: soc(t) = soc(t-1) + charge - discharge
-                    model.addConstr(soc_dom[device][n][d][t] <= soc_dom[device][n][d][t-1] * (1-devs_dom[device]["sto_loss"])
+                    model.addConstr(soc_dom[device][n][d][t] == soc_dom[device][n][d][t-1] * (1-devs_dom[device]["sto_loss"])
                         + (ch_dom[device][n][d][t-1] * devs_dom[device]["eta_ch"] 
                         - dch_dom[device][n][d][t-1] / devs_dom[device]["eta_dch"]))
             
