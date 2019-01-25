@@ -11,7 +11,6 @@ import parameters
 import buildings
 import network
 import balancing_unit
-import post_processing
 import bldg_balancing_optim_complete_clustered as opt_compl_clustered
 
 import datetime
@@ -25,8 +24,8 @@ import time
 use_case = "FZJ"
 
 # Choose scenario
-scenario = "clustered_1bal_bldgTES"        # Clustering, single thermal balance for BU design, TES in buildings
-#scenario = "clustered_absC_bldgTES"         # Clustering, seperated heating and cooling balance for BU design, TES in buildings
+scenario = "clustered_1bal_bldgTES"         # Clustering, single thermal balance for BU design, TES in buildings
+#scenario = "clustered_absC_bldgTES"        # Clustering, seperated heating and cooling balance for BU design, TES in buildings
 #scenario = "clustered_1bal"                # Clustering, single thermal balance for BU design, no building storages
 #scenario = "clustered_absC"                # Clustering, seperated heating and cooling balance for BU design, no building storages
 
@@ -39,11 +38,11 @@ dir_results = path_file + "\\Results\\" + str(datetime.datetime.now().strftime('
 
 if not os.path.exists(dir_results):
     os.makedirs(dir_results)
-
-
-# Load parameters
+#
+#
+## Load parameters
 nodes, param, devs, devs_dom, time_steps = parameters.load_params(use_case, path_file, scenario)
-#time_clustered = parameters.load_params(use_case, path_file)
+
 
 
 

@@ -16,25 +16,12 @@ import bldg_balancing_optim_complete_clustered as opt_compl_clustered
 
 def design_buildings(nodes, param, devs, devs_dom, dir_results):
     
-    dir_buildings = dir_results + "\\buildings"
 
-    if not param["switch_building_optimization"]:
-        nodes, param = heur.calc_residuals(nodes, param, devs_dom, dir_buildings)
-    
-    else:   
-        
-        if param["switch_nodewise"]:
             
-            for n in range(len(nodes)):
-                dir_node = dir_buildings + "\\" + str(nodes[n]["name"])
-                nodes[n], param = opt.run_optim(nodes[n], param, devs_dom, dir_node)
-        
-        else:
-            
-            if param["switch_clustering"]:
-                nodes, param = opt_compl_clustered.run(nodes, param, devs, devs_dom, dir_buildings)
-            else:
-                nodes, param = opt_compl.run(nodes, param, devs, devs_dom, dir_buildings)
+    if param["switch_clustering"]:
+        nodes, param = opt_compl_clustered.run(nodes, param, devs, devs_dom, dir_results)
+    else:
+        nodes, param = opt_compl.run(nodes, param, devs, devs_dom, dir_results)
             
             
             

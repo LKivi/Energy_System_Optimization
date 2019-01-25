@@ -12,7 +12,7 @@ import numpy as np
 #import time
 
 
-
+#%%
 
 # param und nodes als file!!!!!!
 def run(dir_results, param, nodes):
@@ -30,25 +30,30 @@ def run(dir_results, param, nodes):
         os.makedirs(dir_plots)
     
     # Building balance plots
-    plot_bldg_balancing(file, param, nodes, dir_plots + "\\building_balances")
+#    plot_bldg_balancing(file, param, nodes, dir_plots + "\\building_balances")
     
     # BU balance plots
     plot_BU_balances(file, param, dir_plots + "\\BU_balances")
     
     
     # load plots
-    plot_load_charts(file, param, nodes, dir_plots + "\\load_charts")
+#    plot_load_charts(file, param, nodes, dir_plots + "\\load_charts")
     
     
     # Plot capacities and generation
-    plot_capacities(file, param, nodes, dir_plots + "\\capacity_plots")
+#    plot_capacities(file, param, nodes, dir_plots + "\\capacity_plots")
     
     # Plot BU storage SOCs
-    plot_storage_soc(file, param, dir_plots + "\\soc_storages")
+#    plot_storage_soc(file, param, dir_plots + "\\soc_storages")
+    
+    # Plot building sum
+#    plot_building_sum(file, param, dir_sum)
 
 
+    
 
 
+#%%
 
 def plot_storage_soc(file, param, dir_soc):
     
@@ -81,7 +86,8 @@ def plot_storage_soc(file, param, dir_soc):
     
     print("All plots created!")
     
-    
+ 
+#%%
 
 def plot_capacities(file, param, nodes, dir_caps):
     
@@ -95,8 +101,8 @@ def plot_capacities(file, param, nodes, dir_caps):
         os.makedirs(dir_caps)     
     
     # Plot buildings devices
-    all_devs_dom = ["HP", "EH","BOI", "CC", "free_cooler", "air_cooler"]
-    all_flows = ["heat_HP", "heat_EH", "heat_BOI", "cool_CC", "cool_free_cooler", "cool_air_cooler"]
+    all_devs_dom = ["HP", "EH","BOI", "CC", "FRC", "AIR"]
+    all_flows = ["heat_HP", "heat_EH", "heat_BOI", "cool_CC", "cool_FRC", "cool_AIR"]
     
     ind = np.arange(len(all_devs_dom))
     plot_colors = tuple(dev_colors[dev] for dev in all_devs_dom)
@@ -117,8 +123,8 @@ def plot_capacities(file, param, nodes, dir_caps):
         node_caps = tuple(caps[device][n] for device in all_devs_dom)
                 
         plot = plt.bar(ind, node_caps, color=plot_colors, edgecolor="k")
-        plt.xticks(ind, ["HP", "EH", "BOI", "CC", "FRC", "AIR"])
-        plt.legend(plot, ("HP", "EH", "BOI", "CC", "FRC", "AIR"), loc="upper center",ncol=3, fontsize=7)
+        plt.xticks(ind, all_devs_dom)
+        plt.legend(plot, all_devs_dom, loc="upper center",ncol=3, fontsize=7)
         y_max = ax.get_ylim()[1]
         ax.set_ylim(top=1.25*y_max)
         
@@ -134,7 +140,7 @@ def plot_capacities(file, param, nodes, dir_caps):
         gens = tuple(total[flow] for flow in all_flows)
         
         plot = plt.bar(ind, gens, color=plot_colors, edgecolor="k")
-        plt.xticks(ind, ["HP", "EH", "BOI", "CC", "FRC", "AIR"])   
+        plt.xticks(ind, all_devs_dom)   
         y_max = ax.get_ylim()[1]
         ax.set_ylim(top=1.25*y_max)
         
@@ -144,8 +150,8 @@ def plot_capacities(file, param, nodes, dir_caps):
         
         
     # plot BU capacities
-    all_devs = ["BOI", "CHP", "HP", "EH", "CC", "AC", "air_cooler"]
-    all_flows = ["heat_BOI", "power_CHP", "heat_HP", "heat_EH", "cool_CC", "cool_AC", "cool_air_cooler"]
+    all_devs = ["BOI", "CHP", "HP", "EH", "CC", "AC", "HYB"]
+    all_flows = ["heat_BOI", "power_CHP", "heat_HP", "heat_EH", "cool_CC", "cool_AC", "cool_HYB"]
     
     ind = np.arange(len(all_devs))
     plot_colors = tuple(dev_colors[dev] for dev in all_devs)
@@ -195,6 +201,9 @@ def plot_capacities(file, param, nodes, dir_caps):
     print("All plots created!")
     
     
+    
+    
+#%%    
 
 def plot_load_charts(file, param, nodes, dir_plots):
     
@@ -267,6 +276,8 @@ def plot_load_charts(file, param, nodes, dir_plots):
     print("All Plots created!")
 
 
+#%%
+
 def plot_bldg_balancing(file, param, nodes, dir_plots):
     
     time_steps = range(24)
@@ -279,8 +290,8 @@ def plot_bldg_balancing(file, param, nodes, dir_plots):
                  "heat_BOI",
                  "dch_TES", "ch_TES",
                  "cool_CC", "power_CC",
-                 "cool_free_cooler", 
-                 "cool_air_cooler",
+                 "cool_FRC", 
+                 "cool_AIR",
                  ]
     
     # list of all demands
@@ -330,7 +341,7 @@ def plot_bldg_balancing(file, param, nodes, dir_plots):
             # Cooling balance
             ax = fig.add_subplot(2,1,2, ylabel = "Cool [kW]")         
             # Sources
-            cool_sources = ["cool_CC", "cool_free_cooler", "cool_air_cooler"]
+            cool_sources = ["cool_CC", "cool_FRC", "cool_AIR"]
             plot_series = np.zeros((len(cool_sources), len(time_steps)))
             for k in range(len(cool_sources)):
                 plot_series[k,:] = series[cool_sources[k]][d]
@@ -364,17 +375,11 @@ def plot_BU_balances(file, param, dir_plots):
                  "cool_CC", "power_CC",
                  "cool_AC", "heat_AC",
                  "dch_CTES", "ch_CTES",
-                 "cool_air_cooler",
+                 "cool_HYB",
                  "power_from_grid", "power_to_grid",
-                 "power_PV"
+                 "power_PV",
+                 "dch_BAT", "ch_BAT"
                  ]
-    
-    # list of all demands
-#    all_dem = ["heat",
-#               "cool",
-#               "power"
-#               ]
-                 
         
     
     # Create plots for every day    
@@ -402,7 +407,7 @@ def plot_BU_balances(file, param, dir_plots):
     series["power_dem"] = read_energy_flow(file, "residual_power", "BU", param)
     
     
-    # Create plots for every building
+    # Create plots for BU
     for d in range(n_days):
         
         fig = plt.figure()
@@ -428,7 +433,7 @@ def plot_BU_balances(file, param, dir_plots):
         # Cooling balance
         ax = fig.add_subplot(3,1,2, ylabel = "Cool [MW]")         
         # Sources
-        cool_sources = ["cool_CC", "cool_AC", "cool_air_cooler", "dch_CTES"]
+        cool_sources = ["cool_CC", "cool_AC", "cool_HYB", "dch_CTES"]
         plot_series = np.zeros((len(cool_sources), len(time_steps)))
         for k in range(len(cool_sources)):
             plot_series[k,:] = series[cool_sources[k]][d]
@@ -443,7 +448,7 @@ def plot_BU_balances(file, param, dir_plots):
         # Power balance
         ax = fig.add_subplot(3,1,3, ylabel = "Power [MW]")         
         # Sources
-        power_sources = ["power_CHP", "power_PV", "power_from_grid"]
+        power_sources = ["power_CHP", "power_PV", "dch_BAT", "power_from_grid"]
         plot_series = np.zeros((len(power_sources), len(time_steps)))
         for k in range(len(power_sources)):
             plot_series[k,:] = series[power_sources[k]][d]
@@ -454,9 +459,10 @@ def plot_BU_balances(file, param, dir_plots):
         ax.step(time_steps, series["power_dem"][d] + series["power_HP"][d], label = "power_HP", color = flow_colors["HP"], linewidth = 2, zorder = -10)
         ax.step(time_steps, series["power_dem"][d] + series["power_HP"][d] + series["power_CC"][d], label = "power_CC", color = flow_colors["CC"], linewidth = 2, zorder = -20)
         ax.step(time_steps, series["power_dem"][d] + series["power_HP"][d] + series["power_CC"][d] + series["power_EH"][d], label = "power_EH", color = flow_colors["EH"], linewidth = 2, zorder = -30)
-        ax.step(time_steps, series["power_dem"][d] + series["power_HP"][d] + series["power_CC"][d] + series["power_EH"][d] + series["power_to_grid"][d], label = "power_to_grid", color = flow_colors["power_to_grid"], linewidth = 2, zorder = -40)
+        ax.step(time_steps, series["power_dem"][d] + series["power_HP"][d] + series["power_CC"][d] + series["power_EH"][d] + series["ch_BAT"][d][t], label = "ch_BAT", color = flow_colors["ch_BAT"], linewidth = 2, zorder = -40)
+        ax.step(time_steps, series["power_dem"][d] + series["power_HP"][d] + series["power_CC"][d] + series["power_EH"][d] + series["ch_BAT"][d][t] + series["power_to_grid"][d], label = "power_to_grid", color = flow_colors["power_to_grid"], linewidth = 2, zorder = -50)
         ax.set_ylim(bottom = 0, top= ax.get_ylim()[1]*1.3)
-        ax.legend(loc = "upper center", ncol= 4, fontsize = 5)         
+        ax.legend(loc = "upper center", ncol= 5, fontsize = 5)         
         
         
         fig.subplots_adjust(hspace = 0.2)
@@ -466,7 +472,9 @@ def plot_BU_balances(file, param, dir_plots):
 #                
          
     print("All plots created!")
-                
+      
+
+#%%          
                 
 
 def read_energy_flow(file, flow, node, param):
@@ -501,6 +509,7 @@ def read_energy_flow(file, flow, node, param):
     return flows
 
 
+#%%
 
 def read_building_caps(file, device, nodes):
     
@@ -521,102 +530,7 @@ def read_building_caps(file, device, nodes):
     return caps
 
 
-
-
-
-#def read_solution_file(file_name, param, nodes):
-#    
-#    start_time = time.time()
-#    
-#    time_steps = range(24)
-#    
-#    # Number of type-days
-#    n_days = param["n_clusters"]
-#    
-#    # Read file
-#    with open(file_name, "r") as solution_file:
-#        file = solution_file.readlines()
-#    
-#    
-#    # Read time series of energy flows of all devices
-#    
-#    # Prepare dictionary
-#    energy_flows = {}    
-#    for system in ["buildings", "balancing_unit"]:
-#        energy_flows[system] = {}                        
-#        for flow in ["heat", "cool", "power"]:
-#            energy_flows[system][flow] = {}
-#            for function in ["sources", "sinks"]:
-#                energy_flows[system][flow][function] = {}
-#                if system == "buildings":
-#                    for n in nodes:
-#                        energy_flows[system][flow][function][n] = {}
-#
-#    
-#    # Read building energy flows
-#    for n in nodes:
-#
-#        # heat sources
-#        for flow in ["heat_HP", "heat_EH", "heat_BOI"]:                        
-#            energy_flows["buildings"]["heat"]["sources"][n][flow] = read_energy_flows(flow, file, n_days, n)
-#        for flow in ["dch_TES"]:
-#            energy_flows["buildings"]["heat"]["sources"][n][flow] = read_energy_flows(flow, file, n_days, n)
-#            
-#        # heat sinks
-#        for flow in ["heat_dem"]:
-#            energy_flows["buildings"]["heat"]["sinks"][n][flow] = nodes[n]["heat"]
-#        for flow in ["ch_TES"]:
-#            energy_flows["buildings"]["heat"]["sinks"][n][flow] = read_energy_flows(flow, file, n_days, n)
-#            
-#        # cooling sources
-#        for flow in ["cool_CC", "cool_free_cooler", "cool_air_cooler"]:
-#            energy_flows["buildings"]["cool"]["sources"][n][flow] = read_energy_flows(flow, file, n_days, n)
-#        
-#        # cooling sinks
-#        for flow in ["cool_dem"]:
-#            energy_flows["buildings"]["cool"]["sinks"][n][flow] = nodes[n]["cool"]
-#            
-#        # power sources
-#        for flow in ["power_PV"]:
-#            energy_flows["buildings"]["power"]["sources"][n][flow] = read_energy_flows(flow, file, n_days, n)
-#        #BATTERIE HIER FORMAL MITSCHLEPPEN
-#            
-#        # power sinks
-#        for flow in ["power_HP", "power_CC", "power_EH"]:
-#            energy_flows["buildings"]["power"]["sinks"][n][flow] = read_energy_flows(flow, file, n_days, n)
-#            
-#    
-#    
-#    # Read balancing unit energy flows
-#    
-#    # Get residual heating and cooling demand
-#    # !!!!    
-#
-#    # heat sources
-#    for device in ["heat_BOI", "heat_CHP", "heat_HP", "heat_EH"]:
-#        energy_flows["balancing_unit"]["heat"]["sources"][device] = read_energy_flows(flow, file, n_days)
-#    for device in ["dch_TES"]:
-#        energy_flows["balancing_unit"]["heat"]["sources"][device] = read_energy_flows(flow, file, n_days)
-#        
-#    # heat sinks
-##    for device in ["residual"]:
-##        energy_flows["balancing_unit"]["heat"]["sinks"][device] = 
-#            
-#     
-#    return energy_flows
-
-
-
-
-
-
-#energy_flows = read_solution_file(file_name, param, nodes)
-
-
-
-
-
-
+#%%
     
     
 def get_compColor():
@@ -626,84 +540,56 @@ def get_compColor():
     """
     
     compColor = {}
-    
-#    compColor["power_supply"] = "k"
-#    compColor["heat_dem"] = "k"
-#    compColor["cool_dem"] = "k"
-    
+       
     compColor["BOI"] = (0.843, 0.059, 0.059, 0.8)
-    compColor["heat_BOI"] = (0.843, 0.059, 0.059, 0.8)
-#    compColor["BOI_h"] = compColor["BOI"]
+    compColor["heat_BOI"] = compColor["BOI"]
+    
     compColor["CHP"] = (0.137, 0.706, 0.196, 0.8)
-    compColor["heat_CHP"] = (0.137, 0.706, 0.196, 0.8)
-    compColor["power_CHP"] = (0.137, 0.706, 0.196, 0.8)
-#    compColor["CHP_ICE_h"] = compColor["CHP_ICE"]             
-#    compColor["CHP_ICE_p"] = compColor["CHP_ICE"]
-#    compColor["CHP_GT"] = (0.667, 0.824, 0.549, 0.6)
-#    compColor["CHP_GT_h"] = compColor["CHP_GT"]             
-#    compColor["CHP_GT_p"] = compColor["CHP_GT"]
+    compColor["heat_CHP"] = compColor["CHP"]
+    compColor["power_CHP"] = compColor["CHP"]
+    
     compColor["EH"] = (0.961, 0.412, 0.412, 0.8)
-    compColor["heat_EH"] = (0.961, 0.412, 0.412, 0.8)
-    compColor["power_EH"] = (0.961, 0.412, 0.412, 0.8)
-#    compColor["heat_EH"] = compColor["EH"]       
-#    compColor["EH_p"] = compColor["EH"]
+    compColor["heat_EH"] = compColor["EH"]
+    compColor["power_EH"] = compColor["EH"]
+    
     compColor["HP"] = (0.471, 0.843, 1.0, 0.8)
     compColor["heat_HP"] = compColor["HP"]
     compColor["power_HP"] = compColor["HP"]
-#    compColor["heat_HP"] = compColor["HP"]
-#    compColor["heat_consum_HP"] = compColor["HP"]
 
-#    compColor["HP_aw_p"] = compColor["HP_aw"]
-#    compColor["HP_ww"] = (0.471, 0.843, 1.0, 0.8)
-#    compColor["HP_ww_h"] = compColor["HP_ww"]  
-#    compColor["HP_ww_p"] = compColor["HP_ww"]
     compColor["PV"] = (1.000, 0.725, 0.000, 0.8)
-    compColor["power_PV"] = (1.000, 0.725, 0.000, 0.8)
-#    compColor["PV_curtail"] = (1.000, 0.725, 0.000, 0.3)
-#    compColor["PV_fac"] = compColor["PV"]
-#    compColor["STC"] = (0.922, 0.471, 0.039, 0.8)
-#    compColor["STC_curtail"] = (0.922, 0.471, 0.039, 0.3)
-#    compColor["WT"] = (0.098, 0.843, 0.588, 0.8)
-#    compColor["WT_curtail"] = (0.098, 0.843, 0.588, 0.3)
+    compColor["power_PV"] = compColor["PV"]
+
     compColor["AC"] = (0.529, 0.706, 0.882, 0.8)
-    compColor["cool_AC"] = (0.529, 0.706, 0.882, 0.8)
-    compColor["heat_AC"] = (0.529, 0.706, 0.882, 0.8)
-#    compColor["AC_h"] = compColor["AC"]
-#    compColor["AC_c"] = compColor["AC"]
+    compColor["cool_AC"] = compColor["AC"]
+    compColor["heat_AC"] = compColor["AC"]
+
     compColor["CC"] = (0.184, 0.459, 0.710, 0.8)
-    compColor["cool_CC"] = (0.184, 0.459, 0.710, 0.8)
-    compColor["power_CC"] = (0.184, 0.459, 0.710, 0.8)
-#    compColor["cool_CC"] = compColor["CC"]      
-#    compColor["CC_p"] = compColor["CC"]
-#    compColor["BAT"] = (0.482, 0.482, 0.482, 0.8)
-#    compColor["BAT_ch"] = compColor["BAT"] 
-#    compColor["BAT_dch"] = compColor["BAT"]
+    compColor["cool_CC"] = compColor["CC"]
+    compColor["power_CC"] = compColor["CC"]
+
     compColor["TES"] = (0.482, 0.482, 0.482, 0.8)
-    compColor["ch_TES"] = (0.482, 0.482, 0.482, 0.8)
-    compColor["dch_TES"] = (0.482, 0.482, 0.482, 0.8)
-#    compColor["TES_ch"] = compColor["TES"]           
-#    compColor["TES_dch"] = compColor["TES"]
+    compColor["ch_TES"] = compColor["TES"]
+    compColor["dch_TES"] = compColor["TES"]
+
     compColor["CTES"] = (0.582, 0.582, 0.582, 0.8)
     compColor["ch_CTES"] = compColor["CTES"]
     compColor["dch_CTES"] = compColor["CTES"]
-    compColor["free_cooler"] = compColor["AC"]
-    compColor["cool_free_cooler"] = compColor["AC"]
-    compColor["air_cooler"] = compColor["CTES"]
-    compColor["cool_air_cooler"] = (0.282, 0.282, 0.282, 0.8)
-#    compColor["ITES_ch"] = compColor["ITES"] 
-#    compColor["ITES_dch"] = compColor["ITES"]
-#    compColor["H2_TANK"] = (0.482, 0.482, 0.482, 0.8)
-#    compColor["H2_TANK_ch"] = compColor["H2_TANK"] 
-#    compColor["H2_TANK_dch"] = compColor["H2_TANK"]
+    
+    compColor["BAT"] = (0.382, 0.382, 0.382, 0.8)   
+    compColor["ch_BAT"] = compColor["BAT"]
+    compColor["dch_BAT"] = compColor["BAT"]
+    
+    compColor["FRC"] = (0.529, 0.706, 0.882, 0.8)
+    compColor["cool_FRC"] = compColor["FRC"]
+    
+    compColor["AIR"] = compColor["CTES"]
+    compColor["cool_AIR"] = compColor["AIR"]
+    
+    compColor["HYB"] = compColor["HP"]
+    compColor["cool_HYB"] = compColor["HYB"]    
+    
     compColor["power_from_grid"] = (0.749, 0.749, 0.749, 1)
     compColor["power_to_grid"] = (0.749, 0.749, 0.749, 1)
-#    compColor["GEN"] = (0.02, 0.627, 0.627, 0.8)
-#    compColor["GEN_p"] = compColor["GEN"]
-#    compColor["ELYZ"] = (0.706, 0.510, 0.843, 0.8)
-#    compColor["ELYZ_p"] = compColor["ELYZ"]
-#    compColor["FC"] = (0.549, 0.294, 0.784, 0.8)
-#    compColor["FC_h"] = compColor["FC"]
-#    compColor["FC_p"] = compColor["FC"]
-#    compColor["CONV"] = (0.749, 0.749, 0.749, 1)
+
     
     return compColor
