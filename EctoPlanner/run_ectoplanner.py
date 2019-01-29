@@ -24,10 +24,11 @@ import time
 use_case = "FZJ"
 
 # Choose scenario
-scenario = "clustered_1bal_bldgTES"         # Clustering, single thermal balance for BU design, TES in buildings
-#scenario = "clustered_absC_bldgTES"        # Clustering, seperated heating and cooling balance for BU design, TES in buildings
-#scenario = "clustered_1bal"                # Clustering, single thermal balance for BU design, no building storages
-#scenario = "clustered_absC"                # Clustering, seperated heating and cooling balance for BU design, no building storages
+scenario = "typedays_1bal"                              # Typedays, single thermal balance for BU design, TES in buildings
+#scenario = "typedays_absC"                              # Clustering, seperated heating and cooling balance for BU design, TES in buildings
+#scenario = "typedays_1bal_noBldgTES"                    # Clustering, single thermal balance for BU design, no building storages
+#scenario = "typedays_absC_noBldgTES"                    # Clustering, seperated heating and cooling balance for BU design, no building storages
+#scenario = "typedays_standalone"
 
 
 
@@ -41,7 +42,7 @@ if not os.path.exists(dir_results):
 #
 #
 ## Load parameters
-nodes, param, devs, devs_dom, time_steps = parameters.load_params(use_case, path_file, scenario)
+nodes, param, devs, devs_dom = parameters.load_params(use_case, path_file, scenario)
 
 
 
@@ -54,6 +55,11 @@ nodes, residual = buildings.design_buildings(nodes, param, devs, devs_dom, dir_r
            
 # Optimize network topology
 #param = network.design_network(nodes, param, dir_results)
+
+
+
+
+
 
 # Calculate inter-balancing and design balancing unit
 #balancing_unit.design_balancing_unit(nodes, devs, param, residual, dir_results)

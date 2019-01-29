@@ -103,28 +103,28 @@ def load_params(use_case, path_file, scenario):
              "switch_variable_price": 1,            # ---,      1: variable electricity price
              "switch_var_revenue": 1,               # ---,      1: variable feed-in revenue                                                                              
              "switch_COP_buildings": 1,             # ---,      1: Use COP model by Jensen et al. for building devices ; 0: Use COP correlation derived from NIBE F1345 for building devices
-             "switch_cost_functions": 1,            # ---,      1: Use piece-wise linear cost functions, 0: Use constant investment costs (kEUR/MW) for BU devices
+             "switch_cost_functions": 0,            # ---,      1: Use piece-wise linear cost functions, 0: Use constant investment costs (kEUR/MW) for BU devices
              
              # Number of type-days
-             "n_clusters": 20,                      
+             "n_clusters": 50,                      
              
 
              # Building devices             
-             "use_eh_in_bldgs": 0,                 # ---,          should electric heaters be used in buildings?
-             "use_boi_in_bldgs": 0,                # ---,          should boilers be used in buildings?
+             "use_eh_in_bldgs": 1,                 # ---,          should electric heaters be used in buildings?
+             "use_boi_in_bldgs": 1,                # ---,          should boilers be used in buildings?
              "use_frc_in_bldgs": 1,                # ---,          should free coolers be used in buildings?
-             "use_air_in_bldgs": 0,                # ---,          should air coolers be used in buildings?
+             "use_air_in_bldgs": 1,                # ---,          should air coolers be used in buildings?
              "use_cc_in_bldgs": 1,                 # ---,          should compression chillers be used in buildings?
-             "use_pv_in_bldgs": 0,                 # ---,          should pv cells be used in buildings?
+             "use_pv_in_bldgs": 1,                 # ---,          should pv cells be used in buildings?
              "use_hp_in_bldgs": 1,
 #             "use_tes_in_bldgs": 1,
              
 #             "op_hours_el_heater": 500,    # h,            hours in which the eletric heater is operated
              
              # BU Devices
-             "feasible_TES": 0,             # ---,          are thermal energy storages feasible for BU?
-             "feasible_BAT": 0,            # ---,          are batteries feasible for BU?
-             "feasible_CTES": 0,           # ---,           are cold thermal energy storages feasible for BU?
+             "feasible_TES": 1,             # ---,          are thermal energy storages feasible for BU?
+             "feasible_BAT": 0,             # ---,          are batteries feasible for BU?
+             "feasible_CTES": 1,            # ---,           are cold thermal energy storages feasible for BU?
              "feasible_BOI": 1,             # ---,          are gas-fired boilers feasible for BU?
              "feasible_CHP": 1,             # ---,          are CHP units feasible for BU?
              "feasible_EH": 0,              # ---,          are electric heater feasible for BU?
@@ -138,20 +138,25 @@ def load_params(use_case, path_file, scenario):
     # Assign scenario switches according to scenario name
     param_switches = {}
     # Type-day clustering
-    if "clustered" in scenario:
+    if "typedays" in scenario:
         param_switches["switch_clustering"] = 1
     else:
         param_switches["switch_clustering"] = 0
     # Thermal balances for BU design
-    if "1bal" in scenario:
-        param_switches["switch_single_balance"] = 1
-    elif "absC" in scenario:
+    if "absC" in scenario:
         param_switches["switch_single_balance"] = 0
-    # Thermal building storages
-    if "bldgTES" in scenario:
-        param_switches["use_tes_in_bldgs"] = 1
     else:
+        param_switches["switch_single_balance"] = 1
+    # Thermal building storages
+    if "noBldgTES" in scenario:
         param_switches["use_tes_in_bldgs"] = 0
+    else:
+        param_switches["use_tes_in_bldgs"] = 1
+    # Sand-alone scenario
+    if "standalone" in scenario:
+        param_switches["switch_stand_alone"] = 1
+    else:
+        param_switches["switch_stand_alone"] = 0
     
     
     param.update(param_switches)
@@ -181,7 +186,7 @@ def load_params(use_case, path_file, scenario):
     
     # Price for electricity taken from grid
     if param["switch_variable_price"]:
-        spot_prices = np.loadtxt(open("input_data/Spotpreise18.txt", "rb"), delimiter = ",",skiprows = 0, usecols=(0)) / 1000        # kEUR/MWh 
+        spot_prices = np.loadtxt(open("input_data/Spotpreise15.txt", "rb"), delimiter = ",",skiprows = 0, usecols=(0)) / 1000        # kEUR/MWh 
         param["price_el"] = 0.10808 + spot_prices       # kEUR/MWh
     else:
         param["price_el"] = 0.14506 * np.ones(8760)     # kEUR/MWh
@@ -397,6 +402,47 @@ def load_params(use_case, path_file, scenario):
                                 3: 802        # kEUR
                                 } 
 
+
+    
+
+
+    #%% GROUND SOURCE HEAT PUMP
+    
+    devs["HP"] = {                  
+                  "dT_pinch": 2,                                         # K,    temperature difference between heat exchanger sides at pinch point
+                  "dT_min_soil": 2,                                      # K,    minimal temperature difference between soil and brine
+                  "life_time": 20,                                       # a,    operation time (VDI 2067)
+                  "cost_om": 0.025,                                      #---,   annual operation and maintenance as share of investment (VDI 2067)
+                  "dT_evap": 5,                                          # K,    temperature difference of water in evaporator
+                  "dT_cond": param["T_hot"] - param["T_cold"],           # K,    temperature difference of water in condenser
+                  "eta_compr": 0.8,                                      # ---,  isentropic efficiency of compression
+                  "heatloss_compr": 0.1,                                 # ---,  heat loss rate of compression
+                  "COP_max": 7,                                          # ---,  maximum heat pump COP
+                  }
+    
+    # Temperatures
+    t_c_in = param["T_soil_deep"] - devs["HP"]["dT_min_soil"] + 273.15          # heat source inlet (deep soil temperature - minimal temperature difference)
+    dt_c= devs["HP"]["dT_evap"]                                                 # heat source temperature difference
+    t_h_in = param["T_cold"] + 273.15                                           # heat sink inlet temperature 
+    dt_h = devs["HP"]["dT_cond"]                                                # cooling water temperature difference
+ 
+    # Calculate heat pump COPs
+    devs["HP"]["COP"] = calc_COP(devs, param, "HP", [t_c_in, dt_c, t_h_in, dt_h])
+    
+    # Piece-wise linear cost function
+    devs["HP"]["cap_i"] =   {  0: 0,        # MW_th
+                               1: 0.2,      # MW_th
+                               2: 0.5,
+                               3: 4         # MW_th
+                               }
+    
+    devs["HP"]["inv_i"] = {     0: 0,        # kEUR
+                                1: 80,      # kEUR
+                                2: 150,       # kEUR
+                                3: 400
+                                } 
+
+
     #%% COMPRESSION CHILLER
     
     devs["CC"] = {
@@ -430,45 +476,6 @@ def load_params(use_case, path_file, scenario):
                             1: 95,     # kEUR
                             2: 501     # kEUR
                             } 
-    
-
-
-    #%% GROUND SOURCE HEAT PUMP
-    
-    devs["HP"] = {                  
-                  "dT_pinch": 2,                                         # K,    temperature difference between heat exchanger sides at pinch point
-                  "dT_min_soil": 2,                                      # K,    minimal temperature difference between soil and brine
-                  "life_time": 20,                                       # a,    operation time (VDI 2067)
-                  "cost_om": 0.025,                                      #---,   annual operation and maintenance as share of investment (VDI 2067)
-                  "dT_evap": 5,                                          # K,    temperature difference of water in evaporator
-                  "dT_cond": param["T_hot"] - param["T_cold"],           # K,    temperature difference of water in condenser
-                  "eta_compr": 0.8,                                      # ---,  isentropic efficiency of compression
-                  "heatloss_compr": 0.1,                                 # ---,  heat loss rate of compression
-                  "COP_max": 7,                                          # ---,  maximum heat pump COP
-                  }
-    
-    # Temperatures
-    t_c_in = param["T_soil_deep"] - devs["HP"]["dT_min_soil"] + 273.15          # heat source inlet (deep soil temperature - minimal temperature difference)
-    dt_c= devs["HP"]["dT_evap"]                                                 # heat source temperature difference
-    t_h_in = param["T_cold"] + 273.15                                           # heat sink inlet temperature 
-    dt_h = devs["HP"]["dT_cond"]                                                # cooling water temperature difference
- 
-    # Calculate heat pump COPs
-    devs["HP"]["COP"] = calc_COP(devs, param, "HP", [t_c_in, dt_c, t_h_in, dt_h])
-    
-    # Piece-wise linear cost function
-    devs["HP"]["cap_i"] =   {  0: 0,        # MW_th
-                               1: 0.5,      # MW_th
-                               2: 4         # MW_th
-                               }
-    
-    devs["HP"]["inv_i"] = {     0: 0,        # kEUR
-                                1: 100,      # kEUR
-                                2: 400       # kEUR
-                                } 
-
-
-
 
     #%% AIR COOLER 
     devs["HYB"] = {
@@ -571,6 +578,9 @@ def load_params(use_case, path_file, scenario):
                             "inv_fix": 0,          # EUR
                             "cost_om": 0.025,      # ---,      annual operation and maintenance as share of investment (VDI 2067)
                             "COP_max": 7,          # ---,      maximum heat pump COP
+                            "max_cap_air": 100,     # kW,       maximum heating capacity in case of air-source heat pumps
+                            "dT_pinch_air": 8,      # K,        additional pinch point temperature difference in case of air-source heat pump
+                            "dT_air": 5             # K,        temperature decrease of air in case of air-source heat pump   
                             }
         
         
@@ -580,7 +590,9 @@ def load_params(use_case, path_file, scenario):
                            "inv_var": 200,       # EUR/kW, domestic heat pump investment costs
                            "inv_fix": 0,         # EUR
                            "cost_om": 0.035,     #---,     annual operation and maintenance as share of investment (VDI 2067)
-                           "COP_max": 6          # ---,    maximum compression chiller COP
+                           "COP_max": 6,          # ---,    maximum compression chiller COP
+                           "dT_pinch_air": 8,     # K,        additional pinch point temperature difference in case of air-sink
+                           "dT_air": 5             # K,        temperature increase of air in case of air-source heat pump   
                             }
     
     
@@ -595,8 +607,8 @@ def load_params(use_case, path_file, scenario):
     devs_dom["FRC"] = {
                             "dT_min": 2,
                             "life_time": 30,       # a,    operation time (VDI 2067)
-                            "inv_var": 11.436,     # EUR/kW, domestic heat pump investment costs
-                            "inv_fix": 3896.3,     # EUR
+                            "inv_var": 24.084,     # EUR/kW, domestic heat pump investment costs
+                            "inv_fix": 0,
                             "cost_om": 0.03,       #---,   annual operation and maintenance as share of investment 
                             } 
     
@@ -660,19 +672,32 @@ def load_params(use_case, path_file, scenario):
         for n in nodes:  
             
             # Heat pump Temperatures
-            t_c_in = param["T_hot"] + 273.15                                              # heat source inlet (equals hot line temperature)
-            dt_c = param["T_hot"] - param["T_cold"]                                       # heat source temperature difference
+            # source
+            if not param["switch_stand_alone"]:
+                t_c_in = param["T_hot"] + 273.15                                              # heat source inlet (equals hot line temperature)
+                dt_c = param["T_hot"] - param["T_cold"]                                       # heat source temperature difference
+            else:
+                t_c_in = param["t_air"] - devs_dom["HP"]["dT_pinch_air"] + 273.15
+                dt_c = devs_dom["HP"]["dT_air"]
+            # sink (building)
             t_h_in = nodes[n]["T_heating_return"] + 273.15                                # heat sink inlet temperature (equals return temperature of building heating circle)
             dt_h = nodes[n]["T_heating_supply"] - nodes[n]["T_heating_return"]            # heating circle temperature spread       
             
             # Calculate heat pump COP time series
             devs_dom["HP"]["COP"][n] = calc_COP(devs, param, "HP", [t_c_in, dt_c, t_h_in, dt_h])
             
+            
             # Compression chiller temperatures
-            t_c_in = nodes[n]["T_cooling_return"]
+            # source (building)
+            t_c_in = nodes[n]["T_cooling_return"] + 273.15
             dt_c = nodes[n]["T_cooling_return"] - nodes[n]["T_cooling_supply"]
-            t_h_in = param["T_cold"] + 273.15
-            dt_h = param["T_hot"] - param["T_cold"]
+            # sink
+            if not param["switch_stand_alone"]:
+                t_h_in = param["T_cold"] + 273.15
+                dt_h = param["T_hot"] - param["T_cold"]
+            else:
+                t_h_in = param["t_air"] + devs_dom["CC"]["dT_pinch_air"] + 273.15
+                dt_h = devs_dom["HP"]["dT_air"]
 
             # Calculate compression chiller COP time series
             devs_dom["CC"]["COP"][n] = calc_COP(devs, param, "CC", [t_c_in, dt_c, t_h_in, dt_h])            
@@ -715,7 +740,7 @@ def load_params(use_case, path_file, scenario):
     # Calculate annualized investment of every device
     devs = calc_annual_investment(devs, devs_dom, param)
 
-    return nodes, param, devs, devs_dom, time_steps
+    return nodes, param, devs, devs_dom
 
 
 
@@ -968,6 +993,7 @@ def calc_COP(devs, param, device, temperatures):
     
     # device parameters
     dt_pp = devs[device]["dT_pinch"]                # pinch point temperature difference
+#    dt_pp = 50
     eta_is = devs[device]["eta_compr"]              # isentropic compression efficiency
     f_Q = devs[device]["heatloss_compr"]            # heat loss rate during compression
     
@@ -1001,7 +1027,7 @@ def calc_COP(devs, param, device, temperatures):
     
     # COP
     COP = COP_Lor * num/denom * eta_is * (1 - w_is) + 1 - eta_is - f_Q
-    
+
     if device == "CC":
         COP = COP - 1   # consider COP definition for compression chillers (COP_CC = Q_0/P_el = (Q - P_el)/P_el = COP_HP - 1)
     
@@ -1017,6 +1043,8 @@ def calc_COP(devs, param, device, temperatures):
         for t in range(len(COP)):
             if COP[t] > COP_max or COP[t] < 0:
                 COP[t] = COP_max
+
+
                 
 
     return COP
