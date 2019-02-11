@@ -29,7 +29,7 @@ scenario = "typedays_1bal"                              # Typedays, single therm
 #scenario = "typedays_1bal_noBldgTES"                    # Clustering, single thermal balance for BU design, no building storages
 #scenario = "typedays_absC_noBldgTES"                    # Clustering, seperated heating and cooling balance for BU design, no building storages
 #scenario = "typedays_standalone"
-
+#scenario = "1bal_noBldgTES"
 
 
 
@@ -48,8 +48,8 @@ nodes, param, devs, devs_dom = parameters.load_params(use_case, path_file, scena
 
 
 
-# Balancing of building demands
-nodes, residual = buildings.design_buildings(nodes, param, devs, devs_dom, dir_results)
+# Run device optimization
+nodes, param = buildings.design_buildings(nodes, param, devs, devs_dom, dir_results)
 
     
            

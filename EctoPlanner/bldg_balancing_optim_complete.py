@@ -12,16 +12,8 @@ import os
       
 
 def run(nodes, param, devs, devs_dom, dir_results):
-    
-    if param["feasible_TES"] and param["switch_combined_storage"]:
         
-        devs = run_optim(nodes, param, devs, devs_dom, dir_results, 1)
-        
-        nodes, param = run_optim(nodes, param, devs, devs_dom, dir_results, 2)
-        
-    else:
-        
-        nodes, param = run_optim(nodes, param, devs, devs_dom, dir_results, 1)
+    nodes, param = run_optim(nodes, param, devs, devs_dom, dir_results)
         
     return nodes, param
         
@@ -31,23 +23,21 @@ def run(nodes, param, devs, devs_dom, dir_results):
 
 #%%
 # consider integrated hot and cold storage
-def run_optim(nodes, param, devs, devs_dom, dir_results, step):
+def run_optim(nodes, param, devs, devs_dom, dir_results):
     
     time_steps = range(8760)
-    t_air = np.loadtxt(open("input_data/weather.csv", "rb"), delimiter = ",",skiprows = 1, usecols=(0))          # Air temperature °C           
-    G_sol = np.loadtxt(open("input_data/weather.csv", "rb"), delimiter = ",",skiprows = 1, usecols=(3))          # Solar radiation W/m^2              
+    t_air = param["t_air"]          # Air temperature °C           
+    G_sol = param["G_sol"]          # Solar radiation W/m^2              
     
     #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     start_time = time.time()
 
     # Create set for BU devices
-    all_devs = ["BOI", "CHP", "AC", "CC", "TES", "air_cooler", "HP", "EH"] 
+    all_devs = ["BOI", "CHP", "AC", "CC", "TES", "CTES", "HYB", "HP", "EH", "BAT"] 
     
-    if step == 1:
-        all_devs.append("CTES")
     
     # Create set for building devices
-    all_devs_dom = ["HP", "CC", "EH", "free_cooler", "air_cooler", "BOI", "PV", "TES"]     
+    all_devs_dom = ["HP", "CC", "EH", "FRC", "AIR", "BOI", "PV", "TES"]     
     
     
     ## Simplification of BU-Optimization
@@ -55,24 +45,16 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
     # Get constant investment costs (kEUR / MW)
     inv_var = {}
     inv_var["BOI"] = 67.5
-    inv_var["CHP"] = 541.5
+    inv_var["CHP"] = 768
     inv_var["EH"] = 150
-    inv_var["AC"] = 360
-    inv_var["CC"] = 150
-    inv_var["HP"] = 120
-    inv_var["TES"] = 9.2             # kEUR/MWh
-    inv_var["CTES"] = 55.2            # kEUR/MWh
-    inv_var["air_cooler"] = 37.5
+    inv_var["AC"] = 525
+    inv_var["CC"] = 166
+    inv_var["HP"] = 300
+    inv_var["TES"] = 7.9             # kEUR/MWh_th
+    inv_var["CTES"] = 55.2           # kEUR/MWh_th
+    inv_var["HYB"] = 240
+    inv_var["BAT"] = 520             # kEUR/MW_th
     
-    
-    # Get time series of storage function
-    if step == 2:
-        x = {}
-        x["TES"] = {}
-        x["CTES"] = {}
-        for t in range(8761):
-            x["TES"][t] = devs["TES"]["x"][t]
-            x["CTES"][t] = devs["CTES"]["x"][t]
         
          
     #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -87,20 +69,16 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
     #%% BALANCING UNIT VARIABLES
     
     # Piece-wise linear function variables
-#    lin = {}
-#    for device in ["BOI", "CHP", "AC", "CC", "EH"]:   
-#        lin[device] = {}
-#        for i in range(len(devs[device]["cap_i"])):
-#            lin[device][i] = model.addVar(vtype="C", name="lin_" + device + "_i" + str(i))
+    lin = {}
+    for device in ["BOI", "CHP", "AC", "CC", "TES", "CTES", "HP"]:   
+        lin[device] = {}
+        for i in range(len(devs[device]["cap_i"])):
+            lin[device][i] = model.addVar(vtype="C", name="lin_" + device + "_i" + str(i))
     
-    # Purchase decision binary variables (1 if device is installed, 0 otherwise)
-#    x = {}
-#    for device in all_devs:
-#        x[device] = model.addVar(vtype="B", name="x_" + str(device))
             
     # Device's capacity (i.e. nominal power)
     cap = {}
-    for device in ["BOI", "CHP", "AC", "CC", "TES", "CTES", "air_cooler", "HP", "EH"]:
+    for device in ["BOI", "CHP", "AC", "CC", "TES", "CTES", "HYB", "HP", "EH", "BAT"]:
         cap[device] = model.addVar(vtype="C", name="nominal_capacity_" + str(device))
         
     # Storage volumes
@@ -118,7 +96,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
         
     # Eletrical power to/from devices
     power = {}
-    for device in ["CHP", "CC", "from_grid", "to_grid", "HP", "EH"]:
+    for device in ["CHP", "CC", "from_grid", "to_grid", "HP", "EH", "PV"]:
         power[device] = {}
         for t in time_steps:
             power[device][t] = model.addVar(vtype="C", name="power_" + device + "_t" + str(t))
@@ -132,10 +110,17 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
     
     # Cooling power to/from devices
     cool = {}
-    for device in ["CC", "AC", "air_cooler"]:
+    for device in ["CC", "AC", "HYB"]:
         cool[device] = {}
         for t in time_steps:
             cool[device][t] = model.addVar(vtype="C", name="cool_" + device + "_t" + str(t))
+            
+    # Feed-in
+    feed_in = {}
+    for device in ["CHP", "PV"]:
+        feed_in[device] = {}
+        for t in time_steps:
+            feed_in[device][t] = model.addVar(vtype="C", name="feed_in_"+device+"_t"+str(t))
             
     # grid maximum transmission power
     grid_limit_el = model.addVar(vtype = "C", name="grid_limit_el")  
@@ -145,7 +130,14 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
     from_grid_total = model.addVar(vtype = "C", name="from_grid_total")
     # total power to grid
     to_grid_total = model.addVar(vtype = "C", name="to_grid_total")
+    # Gas taken from grid
     gas_total = model.addVar(vtype = "C", name="gas_total")
+    # total revenue for feed-in
+    revenue_feed_in = {}
+    for device in ["CHP", "PV"]:
+        revenue_feed_in[device] = model.addVar(vtype="C", name="revenue_feed_in_"+str(device))
+    # Electricity costs
+    electricity_costs = model.addVar(vtype="C", name="electricity_costs")
 
     # Storage variables
       
@@ -154,7 +146,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
     soc = {} # State of charge
 #    x = {}   # decision varaible determining the function of the storage (hot/cold)
 
-    for device in ["TES", "CTES"]:
+    for device in ["TES", "CTES", "BAT"]:
         ch[device] = {}
         dch[device] = {}
         soc[device] = {}
@@ -173,11 +165,16 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
     # Investment costs
     inv = {}
     c_inv = {}
-    c_om = {}    
+    c_om = {}  
+    c_total = {}
     for device in all_devs:
         inv[device] = model.addVar(vtype = "C", name = "inv_costs_" + device)
+    for device in all_devs:
         c_inv[device] = model.addVar(vtype = "C", name = "annual_inv_costs" + device)
-        c_om[device] = model.addVar(vtype = "C", name = "om_costs" + device)         
+    for device in all_devs:
+        c_om[device] = model.addVar(vtype = "C", name = "om_costs" + device)
+    for device in all_devs:
+        c_total[device] = model.addVar(vtype="C", name = "total_annual_costs_"+device)         
         
     
     
@@ -186,7 +183,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
     
     # Device's capacity (i.e. nominal power)
     cap_dom = {}
-    for device in ["HP", "CC", "EH", "free_cooler", "air_cooler", "BOI", "PV", "TES"]:
+    for device in ["HP", "CC", "EH", "FRC", "AIR", "BOI", "PV", "TES"]:
         cap_dom[device] = {}
         for n in nodes:
             cap_dom[device][n] = model.addVar(vtype="C", name="nominal_capacity_" + str(device) + "_n" + str(n))
@@ -234,14 +231,15 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
     
     # Cooling power to/from devices
     cool_dom = {}
-    for device in ["CC", "free_cooler", "air_cooler"]:
+    for device in ["CC", "FRC", "AIR"]:
         cool_dom[device] = {}
         for n in nodes:
             cool_dom[device][n] = {}
             for t in time_steps:
                 cool_dom[device][n][t] = model.addVar(vtype="C", name="cool_" + device + "_n" + str(n) + "_t" + str(t))
                 
-    # Storage variables     
+    # Storage variables    
+    
     ch_dom = {}                 # Energy flow to charge storage device
     dch_dom = {}                # Energy flow to discharge storage device
     soc_dom = {}                # State of charge
@@ -286,9 +284,6 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
     # Node residual loads
     res_el = {}
     res_thermal= {}
-    res_thermal_abs= {}
-    res_heat= {}
-    res_cool= {}
     for n in nodes:
         res_el[n] = {}
         for t in time_steps:
@@ -296,15 +291,6 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
         res_thermal[n] = {}
         for t in time_steps:
             res_thermal[n][t] = model.addVar(vtype="C", lb=-gp.GRB.INFINITY, name="residual_thermal_demand_n" + str(n) + "_t" + str(t))
-        res_thermal_abs[n] = {}
-        for t in time_steps:
-            res_thermal_abs[n][t] = model.addVar(vtype="C", name="residual_absolute_thermal_demand_n" + str(n) + "_t" + str(t))
-        res_heat[n] = {}
-        for t in time_steps:
-            res_heat[n][t] = model.addVar(vtype="C", lb=-gp.GRB.INFINITY, name="residual_heating_demand_n" + str(n) + "_t" + str(t)) 
-        res_cool[n] = {}
-        for t in time_steps:
-            res_cool[n][t] = model.addVar(vtype="C", lb=-gp.GRB.INFINITY, name="residual_cooling_demand_n" + str(n) + "_t" + str(t))   
 
     
     # Total residual network load
@@ -312,27 +298,38 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
     residual["power"] = {}
     residual["heat"] = {}
     residual["cool"] = {}
+    residual["thermal"] = {}
+    residual["thermal_abs"] = {}
     for t in time_steps:        
         residual["power"][t] = model.addVar(vtype = "C", name="residual_power_t" + str(t))
     for t in time_steps:
         residual["heat"][t] = model.addVar(vtype = "C", name="residual_heating_t" + str(t))   
     for t in time_steps:
         residual["cool"][t] = model.addVar(vtype = "C", name="residual_cooling_t" + str(t))
-        
-        
+    for t in time_steps:
+        residual["thermal"][t] = model.addVar(vtype = "C", lb=-gp.GRB.INFINITY, name="residual_thermal_t" + str(t))        
+    for t in time_steps:
+        residual["thermal_abs"][t] = model.addVar(vtype = "C", name="residual_thermal_abs_t" + str(t))        
         
     # Investment costs
     inv_dom = {}
     c_inv_dom = {}
     c_om_dom = {}
+    c_total_dom = {}
     for device in all_devs_dom:
         inv_dom[device] = {}
         c_inv_dom[device] = {}
         c_om_dom[device] = {} 
+        c_total_dom[device] = {}
         for n in nodes:
             inv_dom[device][n] = model.addVar(vtype="C", name="inv_costs_" + device + "_n" + str(n))
+        for n in nodes:
             c_inv_dom[device][n] = model.addVar(vtype="C", name="annual_inv_costs_" + device + "_n" + str(n))
+        for n in nodes:
             c_om_dom[device][n]  = model.addVar(vtype="C", name="om_costs_" + device + "_n" + str(n))             
+        for n in nodes:
+            c_total_dom[device][n] = model.addVar(vtype="C", name="total_annual_costs_" + device + "_n" + str(n))
+
 
     # Annualized technical building equipment costs
     tac_building = {}
@@ -340,6 +337,9 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
         tac_building[n] = model.addVar(vtype = "c", name="tac_building_n" + str(n))
               
                 
+    # Total annualized costs
+    tac_total = model.addVar(vtype="C", name="total_annualized_costs")
+    
     # Objective functions
     obj = model.addVar(vtype="C", lb=-gp.GRB.INFINITY, name="obj")    
         
@@ -362,7 +362,8 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
     # PV
     for n in nodes:
         for device in ["PV"]:
-            model.addConstr(cap_dom[device][n] <= devs_dom[device]["max_cap"][n])
+            model.addConstr(area_dom[device][n] <= devs_dom[device]["max_area"][n])
+            model.addConstr(cap_dom[device][n] == area_dom[device][n] * devs_dom[device]["G_stc"]/1000 * devs_dom[device]["eta_el_stc"])
             
     # Thermal storage
     for n in nodes:
@@ -371,7 +372,9 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
             model.addConstr(cap_dom[device][n] >= devs_dom[device]["min_cap"][n])
             # Relation between capacity and volume
             model.addConstr(cap_dom[device][n] == vol_dom[device][n] * param["rho_f"] *  param["c_f"] * (devs_dom[device]["T_max"] - devs_dom[device]["T_min"]) / (1000 * 3600))
-            
+   
+
+         
     
     #%% LOAD CONSTRAINTS
     
@@ -382,13 +385,13 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
     
     for n in nodes:  
         for t in time_steps:
-            for device in ["PV"]:
-                model.addConstr(power_dom[device][n][t] <= cap_dom[device][n])                
+#            for device in ["PV"]:
+#                model.addConstr(power_dom[device][n][t] <= cap_dom[device][n])                
             
             for device in ["HP", "EH", "BOI"]:
                 model.addConstr(heat_dom[device][n][t] <= cap_dom[device][n])
             
-            for device in ["CC", "free_cooler", "air_cooler"]:
+            for device in ["CC", "FRC", "AIR"]:
                 model.addConstr(cool_dom[device][n][t] <= cap_dom[device][n])
                 
             # heat pump is limited by maximum supply temperature
@@ -413,7 +416,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
             model.addConstr(heat_dom["BOI"][n][t] == gas_dom["BOI"][n][t] * devs_dom["BOI"]["eta_th"])
             
             # PV
-            model.addConstr(power_dom["PV"][n][t] <= G_sol[t] * devs_dom["PV"]["eta_el"] * area_dom["PV"][n])            
+            model.addConstr(power_dom["PV"][n][t] <= G_sol[t]/1000 * devs_dom["PV"]["eta_el"][t] * area_dom["PV"][n])            
                 
         
 
@@ -426,10 +429,13 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
             model.addConstr(heat_dom["EH"][n][t] + heat_dom["HP"][n][t] + heat_dom["BOI"][n][t] + dch_dom["TES"][n][t]  == nodes[n]["heat"][t] + ch_dom["TES"][n][t] )  
     
             # Cooling balance
-            model.addConstr(cool_dom["CC"][n][t] + cool_dom["free_cooler"][n][t] + cool_dom["air_cooler"][n][t] == nodes[n]["cool"][t] ) 
+            model.addConstr(cool_dom["CC"][n][t] + cool_dom["FRC"][n][t] + cool_dom["AIR"][n][t] == nodes[n]["cool"][t] ) 
             
             # Electricity demands
             model.addConstr(res_el[n][t] == power_dom["EH"][n][t] + power_dom["HP"][n][t] + power_dom["CC"][n][t])
+            
+            # Thermal storage can only be supplied by Electric Heater and Boiler
+            model.addConstr(heat_dom["EH"][n][t] + heat_dom["BOI"][n][t] >= ch_dom["TES"][n][t])
             
     
     #%% BUILDING THERMAL STORAGES
@@ -461,18 +467,18 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
             model.addConstr(m_cooling[n][t] == m_air[n][t] + m_free[n][t] + m_rest[n][t])
             
             # air cooling
-            if t_air[t] + devs_dom["air_cooler"]["dT_min"] > nodes[n]["T_cooling_return"][t]:
+            if t_air[t] + devs_dom["AIR"]["dT_min"] > nodes[n]["T_cooling_return"][t]:
                 model.addConstr(m_air[n][t] == 0)
-                model.addConstr(cool_dom["air_cooler"][n][t] == 0)
+                model.addConstr(cool_dom["AIR"][n][t] == 0)
             else:
-                model.addConstr(cool_dom["air_cooler"][n][t] == m_air[n][t] * param["c_f"] * (nodes[n]["T_cooling_return"][t] - (t_air[t] + devs_dom["air_cooler"]["dT_min"])) / 1000 ) 
+                model.addConstr(cool_dom["AIR"][n][t] == m_air[n][t] * param["c_f"] * (nodes[n]["T_cooling_return"][t] - (t_air[t] + devs_dom["AIR"]["dT_min"])) / 1000 ) 
             
             # free cooling
-            if param["T_hot"][t] + devs_dom["free_cooler"]["dT_min"] > nodes[n]["T_cooling_return"][t]:
+            if param["T_hot"][t] + devs_dom["FRC"]["dT_min"] > nodes[n]["T_cooling_return"][t]:
                 model.addConstr(m_free[n][t] == 0)
-                model.addConstr(cool_dom["free_cooler"][n][t] == 0)
+                model.addConstr(cool_dom["FRC"][n][t] == 0)
             else:
-                model.addConstr(cool_dom["free_cooler"][n][t] == m_free[n][t] * param["c_f"] * (nodes[n]["T_cooling_return"][t] - (param["T_cold"][t] + devs_dom["free_cooler"]["dT_min"])) / 1000 )
+                model.addConstr(cool_dom["FRC"][n][t] == m_free[n][t] * param["c_f"] * (nodes[n]["T_cooling_return"][t] - (param["T_cold"][t] + devs_dom["FRC"]["dT_min"])) / 1000 )
  
 
            
@@ -482,15 +488,15 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
     for n in nodes:
         for t in time_steps:
             
-            model.addConstr(res_thermal[n][t] == (heat_dom["HP"][n][t] - power_dom["HP"][n][t]) - (cool_dom["CC"][n][t] + power_dom["CC"][n][t] + cool_dom["free_cooler"][n][t] ))
+            model.addConstr(res_thermal[n][t] == (heat_dom["HP"][n][t] - power_dom["HP"][n][t]) - (cool_dom["CC"][n][t] + power_dom["CC"][n][t] + cool_dom["FRC"][n][t] ))
             
-            model.addGenConstrAbs(res_thermal_abs[n][t], res_thermal[n][t])
-            
-            model.addConstr(res_heat[n][t] == (res_thermal_abs[n][t] + res_thermal[n][t]) / 2 )
-            model.addConstr(res_cool[n][t] == (res_thermal_abs[n][t] - res_thermal[n][t]) / 2 )
         
     
     #%% DEVICE RESTRICTIONS
+
+    if param["use_hp_in_bldgs"] == 0:       
+        for n in nodes:  
+            model.addConstr(cap_dom["HP"][n] == 0 )
 
     if param["use_cc_in_bldgs"] == 0:       
         for n in nodes:  
@@ -508,13 +514,13 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
         for n in nodes:  
             model.addConstr(cap_dom["BOI"][n] == 0 )
             
-    if param["use_free_cooler_in_bldgs"] == 0:       
+    if param["use_frc_in_bldgs"] == 0:       
         for n in nodes:  
-            model.addConstr(cap_dom["free_cooler"][n] == 0 )
+            model.addConstr(cap_dom["FRC"][n] == 0 )
 
-    if param["use_air_cooler_in_bldgs"] == 0:       
+    if param["use_air_in_bldgs"] == 0:       
         for n in nodes:  
-            model.addConstr(cap_dom["air_cooler"][n] == 0 )
+            model.addConstr(cap_dom["AIR"][n] == 0 )
             
     if param["use_tes_in_bldgs"] == 0:       
         for n in nodes:  
@@ -536,30 +542,41 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
         for n in nodes:
             
             # investment costs
-            model.addConstr( inv_dom[device][n] == devs_dom[device]["inv_var"] * cap_dom[device][n] + devs_dom[device]["inv_fix"] )
+            model.addConstr( inv_dom[device][n] == devs_dom[device]["inv_var"] * cap_dom[device][n] )
         
             # annualized investment
-            model.addConstr( c_inv_dom[device][n] == devs_dom[device]["ann_inv_var"] * cap_dom[device][n] + devs_dom[device]["ann_inv_fix"] )
+            model.addConstr( c_inv_dom[device][n] == devs_dom[device]["ann_inv_var"] * cap_dom[device][n] )
     
             # Operation and maintenance costs 
             model.addConstr( c_om_dom[device][n] == devs_dom[device]["cost_om"] * inv_dom[device][n] )
             
-    
-    # annualized costs for building devices
-    for n in nodes:
-        model.addConstr(tac_building[n] ==  (sum(c_inv_dom[dev][n] for dev in all_devs_dom) + sum(c_om_dom[dev][n] for dev in all_devs_dom)) / 1000)    
+            # tac for building device (kEUR)
+            model.addConstr( c_total_dom[device][n] == (c_inv_dom[device][n] + c_om_dom[device][n]) / 1000)
+             
     
     # Residual loads
     for t in time_steps:
         model.addConstr(residual["power"][t] == sum(res_el[n][t] for n in nodes) / 1000)
-    for t in time_steps:    
-        model.addConstr(residual["heat"][t] == sum(res_heat[n][t] for n in nodes) / 1000)
-    for t in time_steps:   
-        model.addConstr(residual["cool"][t] == sum(res_cool[n][t] for n in nodes) / 1000)      
+    for t in time_steps:
+        model.addConstr(residual["thermal"][t] == sum(res_thermal[n][t] for n in nodes) / 1000)
+
+    
+    # if heating and cooling balances are considered separately: divide residual thermal load into heating and cooling load
+    if not param["switch_single_balance"]:
+        for t in time_steps:  
+        
+            model.addGenConstrAbs(residual["thermal_abs"][t], residual["thermal"][t])
+            
+            model.addConstr(residual["heat"][t] == (residual["thermal_abs"][t] + residual["thermal"][t]) / 2)
+            model.addConstr(residual["cool"][t] == (residual["thermal_abs"][t] - residual["thermal"][t]) / 2)      
                 
     # Gas supply for building boilers
     for t in time_steps:
         model.addConstr(gas["to_buildings"][t] == sum(gas_dom["BOI"][n][t] for n in nodes) / 1000)
+        
+    # PV generation in buildings
+    for t in time_steps:
+        model.addConstr(power["PV"][t] == sum(power_dom["PV"][n][t] for n in nodes) / 1000)
 
         
         
@@ -569,18 +586,30 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
    
     #%% CAPACITY CONSTRAINTS
     
-    for device in ["TES", "CTES"]:
+    for device in ["TES", "CTES", "BAT"]:
         model.addConstr(cap[device] <= devs[device]["max_cap"])
         model.addConstr(cap[device] >= devs[device]["min_cap"])
+    
+    for device in ["TES", "CTES"]:
         # Relation between volume and capacity
         model.addConstr(cap[device] == vol[device] * param["rho_f"] *  param["c_f"] * (devs[device]["T_max"] - devs[device]["T_min"]) / (1e6 * 3600))
-               
-    if step == 2:
-        model.addConstr(vol["TES"] == vol["CTES"])
+     
+    if param["switch_cost_functions"]:
+        # calculate capacities from piece-wise linear variables
+        for device in ["BOI", "CHP", "AC", "CC", "TES", "CTES", "HP"]:
+            
+            model.addConstr(cap[device] == sum(lin[device][i] * devs[device]["cap_i"][i] for i in range(len(devs[device]["cap_i"]))))
+            # lin: Special Ordered Sets of type 2 (SOS2 or S2): an ordered set of non-negative variables, of which at most two can be non-zero, and if 
+            # two are non-zero these must be consecutive in their ordering. 
+            model.addSOS(gp.GRB.SOS_TYPE2, [lin[device][i] for i in range(len(devs[device]["cap_i"]))])
+            
+            # Sum of linear function variables should be 1
+            model.addConstr(1 == sum(lin[device][i] for i in range(len(devs[device]["cap_i"]))))
+              
 
     #%% LOAD CONSTRAINTS
     
-    for device in ["TES", "CTES"]:
+    for device in ["TES", "CTES", "BAT"]:
         for t in time_steps:    
                 model.addConstr(soc[device][t] <= cap[device])     
         
@@ -591,20 +620,23 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
         for device in ["CHP"]:
             model.addConstr(power[device][t] <= cap[device])
         
-        for device in ["CC", "AC", "air_cooler"]:
+        for device in ["CC", "AC", "HYB"]:
             model.addConstr(cool[device][t] <= cap[device])
 
         # limitation of power from and to grid   
-        model.addConstr(sum(gas[device][t] for device in ["BOI", "CHP"]) + sum(gas_dom["BOI"][n][t] for n in nodes) / 1000 <= grid_limit_gas)       
+        model.addConstr(sum(gas[device][t] for device in ["BOI", "CHP", "to_buildings"])  <= grid_limit_gas)       
         for device in ["from_grid", "to_grid"]:
             model.addConstr(power[device][t] <= grid_limit_el)
             
-    # Air cooler temperature constraints
+    # Hybrid cooler temperature constraints
     for t in time_steps:
-        if t_air[t] + devs_dom["air_cooler"]["dT_min"] > param["T_hot"][t]:
-            model.addConstr(cool["air_cooler"][t] == 0)
+        if t_air[t] + devs["HYB"]["dT_min"] > param["T_hot"][t]:
+            model.addConstr(cool["HYB"][t] == 0)
         else:
-            model.addConstr(cool["air_cooler"][t] <= residual["cool"][t] * (param["T_hot"][t] - (t_air[t] + devs_dom["air_cooler"]["dT_min"]))/ (param["T_hot"][t] - param["T_cold"][t] ))
+            if param["switch_single_balance"]:
+                model.addConstr(cool["HYB"][t] <= ( -residual["thermal"][t] + heat["BOI"][t] + heat["CHP"][t] + heat["HP"][t] + heat["EH"][t] + dch["TES"][t]) * (param["T_hot"][t] - (t_air[t] + devs["HYB"]["dT_min"]))/ (param["T_hot"][t] - param["T_cold"][t] ))
+            else:
+                model.addConstr(cool["HYB"][t] <= residual["cool"][t] * (param["T_hot"][t] - (t_air[t] + devs["HYB"]["dT_min"]))/ (param["T_hot"][t] - param["T_cold"][t] ))
             
             
     #%% INPUT / OUTPUT CONSTRAINTS
@@ -637,35 +669,13 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
         # Cyclic condition
         model.addConstr(soc[device][len(time_steps)] == soc[device][0])
     
-    
-        if step == 1:
-    
-            for t in np.arange(1,len(time_steps)+1):
-                # Energy balance: soc(t) = soc(t-1) + charge - discharge
-                model.addConstr(soc[device][t] == soc[device][t-1] * (1-devs[device]["sto_loss"])
-                    + (ch[device][t-1] * devs[device]["eta_ch"] 
-                    - dch[device][t-1] / devs[device]["eta_dch"]))
+        for t in np.arange(1,len(time_steps)+1):
+            # Energy balance: soc(t) = soc(t-1) + charge - discharge
+            model.addConstr(soc[device][t] == soc[device][t-1] * (1-devs[device]["sto_loss"])
+                + (ch[device][t-1] * devs[device]["eta_ch"] 
+                - dch[device][t-1] / devs[device]["eta_dch"]))
        
-        
-        if step == 2:
-           
-            for t in range(len(time_steps)+1):        
-                
-                if t == 0:
-                    # initial state of charge
-                    model.addConstr(soc[device][0] <= x[device][0] * devs[device]["max_cap"])
-                    model.addConstr(soc[device][0] >= x[device][0] * devs[device]["min_cap"])
-                    
-                else:
-                    # Energy balance: soc(t) = soc(t-1) + charge - discharge
-                    model.addConstr(soc[device][t] == soc[device][t-1] * (1-devs[device]["sto_loss"])
-                        + (ch[device][t-1] * devs[device]["eta_ch"] 
-                        - dch[device][t-1] / devs[device]["eta_dch"]))
-                    
-                    
-                    # soc_min <= state of charge <= soc_max
-                    model.addConstr(soc[device][t] <= x[device][t] * devs[device]["max_cap"])
-                    model.addConstr(soc[device][t] >= x[device][t] * devs[device]["min_cap"])
+    
                     
                     
             
@@ -674,16 +684,26 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
     #%% ENERGY BALANCES
     
     for t in time_steps:
-        # Heat balance
-        model.addConstr(heat["BOI"][t] + heat["CHP"][t] + heat["HP"][t] + heat["EH"][t] + dch["TES"][t] == residual["heat"][t] + heat["AC"][t] + ch["TES"][t] )
+        
+        
+        if param["switch_single_balance"]:
+            # Thermal balance (combined heating and cooling balance)
+            model.addConstr( heat["BOI"][t] + heat["CHP"][t] + heat["HP"][t] + heat["EH"][t] + dch["TES"][t] - cool["AC"][t] - cool["CC"][t] - cool["HYB"][t] - dch["CTES"][t] == residual["thermal"][t] + heat["AC"][t] + ch["TES"][t] - ch["CTES"][t])
+        
+        else: # Seperated heating and cooling balance
+            
+            # Heat balance
+            model.addConstr(heat["BOI"][t] + heat["CHP"][t] + heat["HP"][t] + heat["EH"][t] + dch["TES"][t] == residual["heat"][t] + heat["AC"][t] + ch["TES"][t] )
+    
+            # Cooling balance
+            model.addConstr(cool["AC"][t] + cool["CC"][t] + cool["HYB"][t] + dch["CTES"][t] == residual["cool"][t] + ch["CTES"][t] ) 
+
+
+
 
     for t in time_steps:
         # Electricity balance
-        model.addConstr(power["CHP"][t] + sum(power_dom["PV"][n][t] for n in nodes) / 1000 +  power["from_grid"][t] == residual["power"][t] + power["to_grid"][t] + power["CC"][t] + power["HP"][t] + power["EH"][t] )
-
-    for t in time_steps:
-        # Cooling balance
-        model.addConstr(cool["AC"][t] + cool["CC"][t] + cool["air_cooler"][t] + dch["CTES"][t] == residual["cool"][t] + ch["CTES"][t] ) 
+        model.addConstr(power["CHP"][t] + power["PV"][t] +  power["from_grid"][t] + dch["BAT"][t] == residual["power"][t] + power["to_grid"][t] + power["CC"][t] + power["HP"][t] + power["EH"][t] + ch["BAT"][t] )
         
     # Absorption chiller and heat storage can only be supplied by Boiler, CHP and Electic Heater
     for t in time_steps:
@@ -693,22 +713,60 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
     for t in time_steps:
         model.addConstr(cool["CC"][t] + cool["AC"][t] >= ch["CTES"][t])    
         
+
+    #%% GRID FEED-IN
+    
+    for t in time_steps:
+        
+        # Allocate grid-feed-in to CHP and PV
+        model.addConstr(power["to_grid"][t] == feed_in["CHP"][t] + feed_in["PV"][t])
+        
+        model.addConstr(feed_in["CHP"][t] <= power["CHP"][t] + dch["BAT"][t])
+        model.addConstr(feed_in["PV"][t] <= power["PV"][t])
+        
+
         
         
     #%% DEVICE RESTRICTIONS
     
     if not param["feasible_TES"]:
         model.addConstr(cap["TES"] == 0)
-        model.addConstr(cap["CTES"] == 0)
         for t in time_steps:
             model.addConstr(ch["TES"][t] == 0)
-            model.addConstr(dch["TES"][t] == 0)
-            model.addConstr(ch["CTES"][t] == 0)
-            model.addConstr(dch["CTES"][t] == 0)            
+            model.addConstr(dch["TES"][t] == 0)           
         
+    if not param["feasible_CTES"]:
+        model.addConstr(cap["CTES"] == 0)
+        for t in time_steps:
+            model.addConstr(ch["CTES"][t] == 0)
+            model.addConstr(dch["CTES"][t] == 0) 
+            
+    if not param["feasible_BAT"]:
+        model.addConstr(cap["BAT"] == 0)
+        for t in time_steps:
+            model.addConstr(ch["BAT"][t] == 0)
+            model.addConstr(dch["BAT"][t] == 0)  
+            
+    if not param["feasible_HYB"]:
+        model.addConstr(cap["HYB"] == 0)    
+
+    if not param["feasible_BOI"]:
+        model.addConstr(cap["BOI"] == 0) 
+        
+    if not param["feasible_CHP"]:
+        model.addConstr(cap["CHP"] == 0) 
+        
+    if not param["feasible_AC"]:
+        model.addConstr(cap["AC"] == 0) 
     
-    
-    
+    if not param["feasible_CC"]:
+        model.addConstr(cap["CC"] == 0) 
+
+    if not param["feasible_HP"]:
+        model.addConstr(cap["HP"] == 0) 
+
+    if not param["feasible_EH"]:
+        model.addConstr(cap["EH"] == 0) 
 
     #%% SUM UP RESULTS
     
@@ -716,12 +774,22 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
   
     model.addConstr(from_grid_total == sum(power["from_grid"][t] for t in time_steps))
     model.addConstr(to_grid_total == sum(power["to_grid"][t] for t in time_steps))
-#    from_DH_total = sum(heat["from_DH"][t] for t in time_steps)
-#    from_DC_total = sum(cool["from_DC"][t] for t in time_steps)
+    
+    model.addConstr(electricity_costs == sum((power["from_grid"][t] * param["price_el"][t]) for t in time_steps))
+
+    
+    for device in ["PV", "CHP"]:
+        model.addConstr(revenue_feed_in[device] == sum((feed_in[device][t] * param["revenue_feed_in"][device][t]) for t in time_steps))
     
     # Investment costs
-    for device in all_devs:
-        model.addConstr( inv[device] == inv_var[device] * cap[device] )
+    if param["switch_cost_functions"]:
+        for device in ["BOI", "CHP", "AC", "CC", "TES", "CTES", "HP"]:
+            model.addConstr( inv[device] == sum(lin[device][i] * devs[device]["inv_i"][i] for i in range(len(devs[device]["cap_i"]))) )
+        for device in ["EH", "HYB"]:
+            model.addConstr(inv[device] == devs[device]["inv_var"] * cap[device])            
+    else:
+        for device in all_devs:
+            model.addConstr(inv[device] == inv_var[device] * cap[device])
         
     # annualized investment
     for device in all_devs:
@@ -730,6 +798,10 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
     # Operation and maintenance costs
     for device in all_devs: 
         model.addConstr( c_om[device] == devs[device]["cost_om"] * inv[device] )
+        
+    # Annualized costs for device
+    for device in all_devs:
+        model.addConstr(c_total[device] == c_inv[device] + c_om[device])
     
     
             
@@ -737,12 +809,14 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
     #%% OBJECTIVE
     
     
-    model.addConstr(obj ==       sum(c_inv[dev] for dev in all_devs) + sum(c_om[dev] for dev in all_devs)
-                                    + sum(tac_building[n] for n in nodes)   
+    model.addConstr(tac_total ==            sum(c_total[dev] for dev in all_devs)
+                                    + sum(sum(c_total_dom[dev][n] for n in nodes) for dev in all_devs_dom)   
                                     + gas_total * param["price_gas"] + grid_limit_gas * param["price_cap_gas"]
-                                    + from_grid_total * param["price_el"] + grid_limit_el * param["price_cap_el"]     # grid electricity costs
-                                    - to_grid_total * param["revenue_feed_in"]
+                                    + electricity_costs + grid_limit_el * param["price_cap_el"]     # grid electricity costs
+                                    - sum(revenue_feed_in[dev] for dev in ["CHP", "PV"])
                                     , "sum_up_TAC")
+    
+    model.addConstr(obj == tac_total)
                                     
         
             
@@ -755,12 +829,12 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
     
     # Set solver parameters
     model.Params.MIPGap     = 0.01   # ---,         gap for branch-and-bound algorithm
-    model.Params.method     = 2                 # ---,         -1: default, 0: primal simplex, 1: dual simplex, 2: barrier, etc.
-    model.Params.Heuristics = 0
-    model.Params.MIPFocus   = 2
-    model.Params.Cuts       = 3
-    model.Params.PrePasses  = 8
-    model.Params.Crossover  = 0
+#    model.Params.method     = 2                 # ---,         -1: default, 0: primal simplex, 1: dual simplex, 2: barrier, etc.
+#    model.Params.Heuristics = 0
+#    model.Params.MIPFocus   = 2
+#    model.Params.Cuts       = 3
+#    model.Params.PrePasses  = 8
+#    model.Params.Crossover  = 0
     
     # Execute calculation
     start_time = time.time()
@@ -784,107 +858,53 @@ def run_optim(nodes, param, devs, devs_dom, dir_results, step):
 
     
     else:
-    
-        # analyze time series of storage soc's
-        if param["feasible_TES"] and param["switch_combined_storage"] and step == 1:
+
             
-            devs["TES"]["x"] = np.zeros(8761)
-            devs["CTES"]["x"] = np.zeros(8761)
+        # Write Gurobi files
+        model.write(dir_results + "\model.lp")
+        model.write(dir_results + "\model.prm")
+        model.write(dir_results + "\model.sol")
+        
+        # Save device capacities in nodes 
+        for n in nodes:
+            nodes[n]["PV_capacity"] = cap_dom["PV"][n].X
+            nodes[n]["HP_capacity"] = cap_dom["HP"][n].X
+            nodes[n]["CC_capacity"] = cap_dom["CC"][n].X
+            nodes[n]["EH_capacity"] = cap_dom["EH"][n].X
+            nodes[n]["BOI_capacity"] = cap_dom["BOI"][n].X
+            nodes[n]["TES_capacity"] = cap_dom["TES"][n].X
+            nodes[n]["air_cooler_capacity"] = cap_dom["AIR"][n].X
+            nodes[n]["free_cooler_capacity"] = cap_dom["FRC"][n].X
             
-            param["storage_intervals"] = {}
-            
-                  
-            # divide time steps into equal intervals according to number of allowed storage function changes
-            if param["n_storage_changes"] == 0:
-                param["n_storage_changes"] = 1       
-            dt = 8760 / param["n_storage_changes"]
-            
-            
-            for i in range(param["n_storage_changes"]):
-                
-                if i == 0:
-                    t_start = 0
-                    t_end = np.int(dt)
-                else:
-                    t_start = t_end + 1
-                    t_end = np.int(dt*(i+1))                   
-                    
-                # find needed storage function in each interval
-                interval = range(t_start, t_end + 1)
-                param["storage_intervals"][i] = interval
-                hot_mean = np.sum(soc["TES"][t].X for t in interval )  / (t_end - t_start + 1)    # mean soc of hot storage
-                cold_mean = np.sum(soc["CTES"][t].X for t in interval ) / (t_end - t_start + 1)   # mean soc of cold storage                
-                
-                for t in interval:               
-                    if hot_mean >= cold_mean:
-                        devs["TES"]["x"][t] = 1
-                        devs["CTES"]["x"][t] = 0
-                    else:
-                        devs["TES"]["x"][t] = 0
-                        devs["CTES"]["x"][t] = 1  
-                        
-                # If storage changes its function, it must be empty at the beginning of the new interval
-                if i > 0 and devs["TES"]["x"][t_start - 1] != devs["TES"]["x"][t_start]:
-                        devs["TES"]["x"][t_start] = 0
-                        devs["CTES"]["x"][t_start] = 0
-            
-            if devs["TES"]["x"][8760] != devs["TES"]["x"][0]:
-                        devs["TES"]["x"][0] = 0
-                        devs["CTES"]["x"][0] = 0        
-                        devs["TES"]["x"][8760] = 0
-                        devs["CTES"]["x"][8760] = 0 
-                                                
-            return devs
-    
-    
-    
-        else:
-            
-            # Write Gurobi files
-            model.write(dir_results + "\model.lp")
-            model.write(dir_results + "\model.prm")
-            model.write(dir_results + "\model.sol")
-            
-            # Save device capacities in nodes 
-            for n in nodes:
-                nodes[n]["PV_capacity"] = cap_dom["PV"][n].X
-                nodes[n]["HP_capacity"] = cap_dom["HP"][n].X
-                nodes[n]["CC_capacity"] = cap_dom["CC"][n].X
-                nodes[n]["EH_capacity"] = cap_dom["EH"][n].X
-                nodes[n]["BOI_capacity"] = cap_dom["BOI"][n].X
-                nodes[n]["TES_capacity"] = cap_dom["TES"][n].X
-                nodes[n]["air_cooler_capacity"] = cap_dom["air_cooler"][n].X
-                nodes[n]["free_cooler_capacity"] = cap_dom["free_cooler"][n].X
-                
-                # save residual loads in nodes
-                nodes[n]["res_heat_dem"] = np.zeros(8760)
-                nodes[n]["power_dem"] = np.zeros(8760)
-                for t in time_steps:
-                    nodes[n]["res_heat_dem"][t] = res_thermal[n][t].X
-                    nodes[n]["power_dem"][t] = res_el[n][t].X       
-            
-                # Mass flow from hot to cold pipe
-                mass_flow = nodes[n]["res_heat_dem"] * 1000 / (param["c_f"] * (param["T_hot"] - param["T_cold"]))     # kg/s
-                nodes[n]["mass_flow"] = mass_flow
-                
-            
-                nodes[n]["tac_building"] = tac_building[n].X 
-            
-            
-            # save annualized costs for devices and gas demand for buildings
-            param["tac_buildings"] = sum(nodes[n]["tac_building"] for n in nodes)                                       # kEUR/a, annualized costs for building devices
-            param["gas_buildings"] = {}
+            # save residual loads in nodes
+            nodes[n]["res_heat_dem"] = np.zeros(8760)
+            nodes[n]["power_dem"] = np.zeros(8760)
             for t in time_steps:
-                param["gas_buildings"][t] = gas["to_buildings"][t].X 
-            param["gas_buildings_total"] = sum(param["gas_buildings"][t] for t in time_steps)
+                nodes[n]["res_heat_dem"][t] = res_thermal[n][t].X
+                nodes[n]["power_dem"][t] = res_el[n][t].X       
+        
+            # Mass flow from hot to cold pipe
+            mass_flow = nodes[n]["res_heat_dem"] * 1000 / (param["c_f"] * (param["T_hot"] - param["T_cold"]))     # kg/s
+            nodes[n]["mass_flow"] = mass_flow
+            
+        
+            nodes[n]["tac_building"] = sum(c_total_dom[dev][n].X for dev in all_devs_dom)
+        
+        
+        # save annualized costs for devices and gas demand for buildings
+        param["tac_buildings"] = sum(nodes[n]["tac_building"] for n in nodes)                                       # kEUR/a, annualized costs for building devices
+        param["gas_buildings"] = {}
+        for t in time_steps:
+            param["gas_buildings"][t] = gas["to_buildings"][t].X 
+        param["gas_buildings_total"] = sum(param["gas_buildings"][t] for t in time_steps)
 #            param["gas_buildings_max"] = max( sum(gas_dom["BOI"][n][t].X for n in nodes) for t in time_steps) / 1000    # MW, maximum gas load of buildings
-            
-            
-            # Print tac
-            print("tac: " + str(obj.X))
-            
-    
-            return nodes, param
+        
+        
+        # Print tac
+        print("tac: " + str(obj.X))
+        
+
+        return nodes, param
 
 
 
