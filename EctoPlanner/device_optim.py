@@ -6,22 +6,31 @@ Created on Sat Aug  4 11:23:57 2018
 """
 
 import numpy as np
-import bldg_balancing_heur as heur
-import bldg_balancing_optim_nodewise as opt
-import bldg_balancing_optim_complete as opt_compl
-import bldg_balancing_optim_complete_clustered as opt_compl_clustered
+import device_optim_conventional as opt_conv
+import device_optim_conventional_clustered as opt_conv_clustered
+import device_optim_ectogrid as opt_ecto
+import device_optim_ectogrid_clustered as opt_ecto_clustered
+
 
 
 # Calculate mass flow through building (intra-balancing): "> 0": flow from supply to return pipe   
 
-def design_buildings(nodes, param, devs, devs_dom, dir_results):
+def run(nodes, param, devs, devs_dom, dir_results):
     
 
-            
-    if param["switch_clustering"]:
-        nodes, param = opt_compl_clustered.run(nodes, param, devs, devs_dom, dir_results)
+    if param["switch_conventional_DHC"]:
+
+        if param["switch_clustering"]:        
+            nodes, param = opt_conv_clustered.run_optim("tac", "", "", nodes, param, devs, devs_dom, dir_results)
+        else:
+            nodes, param = opt_conv.run_optim("tac", "", "", nodes, param, devs, devs_dom, dir_results)
+
     else:
-        nodes, param = opt_compl.run(nodes, param, devs, devs_dom, dir_results)
+        
+        if param["switch_clustering"]:
+            nodes, param = opt_ecto_clustered.run_optim(nodes, param, devs, devs_dom, dir_results)
+        else:
+            nodes, param = opt_ecto.run_optim(nodes, param, devs, devs_dom, dir_results)
             
             
     

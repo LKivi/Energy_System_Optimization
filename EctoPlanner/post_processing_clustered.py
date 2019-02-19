@@ -83,18 +83,20 @@ def calc_KPIs(file, nodes, param, dir_results):
     time_steps = range(24)
     n_days = param["n_clusters"]
     
+    dict_KPI = {}
+    
     
     # Cost KPIs
     # Costs for thermal energy supply (EUR/MWh)
     # Read total annualized costs (EUR)
     for line in range(len(file)):
         if "total_annualized_costs" in file[line]:
-            tac_total = float(str.split(file[line])[1]) * 1000
+            dict_KPI["tac_total"] = float(str.split(file[line])[1])
             break            
     # total thermal energy demand (heating and cooling) (MWh)
     dem_total = sum(sum(sum(sum((nodes[n][dem][d][t] * param["day_weights"][d]) for dem in ["heat", "cool"]) for t in time_steps) for d in range(n_days)) for n in nodes) / 1000    
     # Calculate supply costs EUR/MWh
-    supply_costs = tac_total / dem_total
+    dict_KPI["supply_costs"] = dict_KPI["tac_total"] * 1000 / dem_total
     
     
     
@@ -109,24 +111,30 @@ def calc_KPIs(file, nodes, param, dir_results):
         for t in time_steps:
             dem["heat"][d][t] = sum(nodes[n]["heat"][d][t] for n in nodes)
             dem["cool"][d][t] = sum(nodes[n]["cool"][d][t] for n in nodes)
-    DOC_dem = ( 2 * sum(sum( min( dem["heat"][d][t], dem["cool"][d][t] ) * param["day_weights"][d] for d in range(n_days)) for t in time_steps)) / (dem_total*1000)
+    dict_KPI["DOC_dem"] = ( 2 * sum(sum( min( dem["heat"][d][t], dem["cool"][d][t] ) * param["day_weights"][d] for d in range(n_days)) for t in time_steps)) / (dem_total*1000)
     
     
     # Internal
+    dict_KPI["DOC_BES"] = {}
     # collect relevant flows
     flows = ["heat_HP", "power_HP",
              "cool_CC", "power_CC",
              "cool_FRC"]
-    BES_heating = np.zeros((n_days, len(time_steps)))
-    BES_cooling = np.zeros((n_days, len(time_steps)))
+    BES_heating = {}
+    BES_cooling = {}
     series = {}
     for n in nodes:
         series[n] = {}
         for flow in flows:
             series[n][flow] = read_energy_flow(file, flow, n, param)
-    BES_heating = sum(series[n]["heat_HP"] - series[n]["power_HP"] for n in nodes)
-    BES_cooling = sum(series[n]["cool_CC"] + series[n]["power_CC"] + series[n]["cool_FRC"] for n in nodes)
-    DOC_BES = ( 2 * sum(sum( min(BES_heating[d][t], BES_cooling[d][t]) * param["day_weights"][d] for d in range(n_days)) for t in time_steps)) / ( sum(sum((BES_heating[d][t] + BES_cooling[d][t]) * param["day_weights"][d] for d in range(n_days)) for t in time_steps))
+        BES_heating[n] = series[n]["heat_HP"] - series[n]["power_HP"]
+        BES_cooling[n] = series[n]["cool_CC"] + series[n]["power_CC"] + series[n]["cool_FRC"]
+        
+    for n in nodes:
+        dict_KPI["DOC_BES"][n] = ( 2 * sum(sum( min(BES_heating[n][d][t], BES_cooling[n][d][t]) * param["day_weights"][d] for d in range(n_days)) for t in time_steps)) / ( sum(sum((BES_heating[n][d][t] + BES_cooling[n][d][t]) * param["day_weights"][d] for d in range(n_days)) for t in time_steps))
+
+        
+    dict_KPI["DOC_BES"]["sum"] = ( 2 * sum(sum(sum( min(BES_heating[n][d][t], BES_cooling[n][d][t]) * param["day_weights"][d] for d in range(n_days)) for t in time_steps) for n in nodes)) / ( sum(sum(sum((BES_heating[n][d][t] + BES_cooling[n][d][t]) * param["day_weights"][d] for d in range(n_days)) for t in time_steps) for n in nodes))
         
     
     
@@ -142,7 +150,7 @@ def calc_KPIs(file, nodes, param, dir_results):
                     subs_heating_demand[d][t] += res_thermal[d][t]
                 else:
                     subs_cooling_demand[d][t] += -res_thermal[d][t] 
-    DOC_N = ( 2 * sum(sum( min(subs_heating_demand[d][t], subs_cooling_demand[d][t]) * param["day_weights"][d] for d in range(n_days)) for t in time_steps)) / (sum(sum((subs_heating_demand[d][t] + subs_cooling_demand[d][t]) * param["day_weights"][d] for d in range(n_days)) for t in time_steps))                      
+    dict_KPI["DOC_N"] = ( 2 * sum(sum( min(subs_heating_demand[d][t], subs_cooling_demand[d][t]) * param["day_weights"][d] for d in range(n_days)) for t in time_steps)) / (sum(sum((subs_heating_demand[d][t] + subs_cooling_demand[d][t]) * param["day_weights"][d] for d in range(n_days)) for t in time_steps))                      
     
     
     
@@ -167,23 +175,23 @@ def calc_KPIs(file, nodes, param, dir_results):
     pv_total = sum(sum(power_PV[d][t] for t in time_steps) * param["day_weights"][d] for d in range(n_days))
 
             
-    eta_ex = (dem_heat*(1-T_ref/T_heating) + dem_cool*(1-T_cooling/T_ref) + to_grid_total) / ( gas_total + from_grid_total + pv_total)
+    dict_KPI["eta_ex"] = (dem_heat*(1-T_ref/T_heating) + dem_cool*(1-T_cooling/T_ref) + to_grid_total) / ( gas_total + from_grid_total + pv_total)
     
     
     
-    # Energetic efficiency
-    eta_en = (dem_heat + dem_cool + to_grid_total) / (gas_total + from_grid_total + pv_total)
+    # Energetic System COP
+    dict_KPI["COP_system"] = (dem_heat + dem_cool + to_grid_total) / (gas_total + from_grid_total + pv_total)
     
     
     # CO2 - Emissions [kg/MWh_th]
     for line in range(len(file)):
         if "total_gross_CO2" in file[line]:
-            co2_total = float(str.split(file[line])[1]) * 1000
-    co2_spec = co2_total / dem_total      
+            dict_KPI["co2_total"] = float(str.split(file[line])[1])
+    dict_KPI["co2_spec"] = dict_KPI["co2_total"] * 1000 / dem_total      
     
     # Use of primary energy
-    PE_total = (from_grid_total - to_grid_total) * param["PEF_power"] + gas_total * param["PEF_gas"]
-    PE_spec = PE_total / dem_total
+    dict_KPI["PE_total"] = (from_grid_total - to_grid_total) * param["PEF_power"] + gas_total * param["PEF_gas"]
+    dict_KPI["PE_spec"] = dict_KPI["PE_total"] / dem_total
     
     
     
@@ -194,24 +202,30 @@ def calc_KPIs(file, nodes, param, dir_results):
         
         outfile.write("Demand Overlap Coefficients \n")
         outfile.write("--------------------------- \n")
-        outfile.write("Demand DOC:   " + str(round(DOC_dem,3)) + "\n")
-        outfile.write("BES DOC:      " + str(round(DOC_BES,3)) + "\n")
-        outfile.write("Network DOC:  " + str(round(DOC_N,3)) + "\n\n\n")
+        outfile.write("Demand DOC:    " + str(round(dict_KPI["DOC_dem"],3)) + "\n")
+        outfile.write("Mean BES DOC:  " + str(round(dict_KPI["DOC_BES"]["sum"],3)) + "\n")
+        outfile.write("Network DOC:   " + str(round(dict_KPI["DOC_N"],3)) + "\n\n\n")
         
         outfile.write("Economic KPIs \n")    
         outfile.write("------------- \n")   
-        outfile.write("Total annualized costs [kEUR/a]:                    " + str(round(tac_total/1000,2)) +"\n") 
-        outfile.write("Specific thermal energy supply costs [EUR/MWh_th]:  " + str(round(supply_costs,3)) +"\n\n\n") 
+        outfile.write("Total annualized costs [kEUR/a]:                    " + str(round(dict_KPI["tac_total"],2)) +"\n") 
+        outfile.write("Specific thermal energy supply costs [EUR/MWh_th]:  " + str(round(dict_KPI["supply_costs"],3)) +"\n\n\n") 
         
         outfile.write("System efficiency \n")  
         outfile.write("----------------- \n")
-        outfile.write("Exergetic efficiency:   " + str(round(eta_ex,3)) + "\n")
-        outfile.write("Energetic efficiency:   " + str(round(eta_en,3)) + "\n\n\n")
+        outfile.write("Exergetic efficiency:   " + str(round(dict_KPI["eta_ex"],3)) + "\n")
+        outfile.write("System COP:             " + str(round(dict_KPI["COP_system"],3)) + "\n\n\n")
     
         outfile.write("Ecological KPIs \n")  
         outfile.write("----------------- \n")
-        outfile.write("Specific gross CO2 emissions [kg/MWh_th]:        " + str(round(co2_spec,2)) + "\n")
-        outfile.write("Specific use of primary energy [MWh_PE/MWh_th]:  " + str(round(PE_spec,3)) + "\n")    
+        outfile.write("Total gross CO2 emissions [t/a]:                 " + str(round(dict_KPI["co2_total"],2)) + "\n")
+        outfile.write("Specific gross CO2 emissions [kg/MWh_th]:        " + str(round(dict_KPI["co2_spec"],2)) + "\n")
+        outfile.write("Total use of primary energy [MWh_PE]:            " + str(round(dict_KPI["PE_total"],2)) + "\n") 
+        outfile.write("Specific use of primary energy [MWh_PE/MWh_th]:  " + str(round(dict_KPI["PE_spec"],3)) + "\n")   
+        
+        
+    with open(dir_results + "\System_KPIs.json", "w") as outfile:
+        json.dump(dict_KPI, outfile, indent=4, sort_keys=True)   
         
         
     
@@ -222,9 +236,9 @@ def calc_KPIs(file, nodes, param, dir_results):
 def plot_costs(file, param, nodes, dir_costs):
     
     
-    all_devs = ["BOI", "CHP", "AC", "CC", "TES", "CTES", "AIR", "HP", "EH", "BAT"] 
+    all_devs = ["BOI", "CHP", "AC", "CC", "TES", "CTES", "AIR", "HP", "EH", "BAT", "PV"] 
         
-    all_devs_dom = ["HP", "CC", "EH", "FRC", "AIR", "BOI", "PV", "TES"]  
+    all_devs_dom = ["HP", "CC", "EH", "FRC", "AIR", "BOI", "TES"]  
 
     
     # Read costs 
@@ -776,6 +790,42 @@ def plot_capacities(file, param, nodes, dir_caps):
 #            plt.show()
         plt.close(fig)
         
+        
+    # Plot sum of building devices
+    fig = plt.figure()
+    
+    # Plot device capacities
+    ax = fig.add_subplot(2,1,1, ylabel = "Device cap sum [MW]")
+    
+    device_caps = tuple(sum(caps[device][n] for n in node_list)/1000 for device in all_devs_dom)
+                
+    plot = plt.bar(ind, device_caps, color=plot_colors, edgecolor="k")
+    plt.xticks(ind, all_devs_dom)
+    plt.legend(plot, all_devs_dom, loc="upper center",ncol=3, fontsize=7)
+    y_max = ax.get_ylim()[1]
+    ax.set_ylim(top=1.25*y_max)
+    
+    
+    # Plot device energy generation
+    fig.add_subplot(2,1,2, ylabel = "Device gen sum [MWh]")
+    
+    total = {}
+    for flow in all_flows:
+        total[flow] = 0
+        for n in node_list:
+            series = read_energy_flow(file, flow, n, param)
+            total[flow] += sum(sum(series[d][t] for t in time_steps) * param["day_weights"][d] for d in range(n_days)) / 1000
+        
+    gens = tuple(total[flow] for flow in all_flows)
+    
+    plot = plt.bar(ind, gens, color=plot_colors, edgecolor="k")
+    plt.xticks(ind, all_devs_dom)   
+    y_max = ax.get_ylim()[1]
+    ax.set_ylim(top=1.25*y_max)
+    
+    fig.savefig(fname = dir_caps + "\\Building_sum.png", dpi = 200, format = "png", bbox_inches="tight", pad_inches=0.1)
+#            plt.show()
+    plt.close(fig)    
         
     # plot BU capacities
     all_devs = ["BOI", "CHP", "HP", "EH", "CC", "AC", "AIR"]
