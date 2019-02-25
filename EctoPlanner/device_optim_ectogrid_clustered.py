@@ -31,10 +31,10 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
     start_time = time.time()
 
     # Create set for BU devices
-    all_devs = ["BOI", "CHP", "AC", "CC", "TES", "CTES", "AIR", "HP", "EH", "BAT", "PV"] 
+    all_devs = ["BOI", "CHP", "AC", "CC", "TES", "CTES", "AIRC", "HP", "EH", "BAT", "PV"] 
         
     # Create set for building devices
-    all_devs_dom = ["HP", "CC", "EH", "FRC", "AIR", "BOI", "TES"]     
+    all_devs_dom = ["HP", "CC", "EH", "FRC", "AIRC", "BOI", "TES"]     
     
     
     # Get constant investment costs (kEUR / MW)
@@ -48,7 +48,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
     inv_var["CTES"] = 55.2           # kEUR/MWh_th
     
     
-    inv_var["AIR"] = devs["AIR"]["inv_var"]
+    inv_var["AIRC"] = devs["AIRC"]["inv_var"]
     inv_var["EH"] = devs["EH"]["inv_var"]
     inv_var["BAT"] = devs["BAT"]["inv_var"]            # kEUR/MWh_el
     inv_var["PV"] = devs["PV"]["inv_var"]
@@ -76,7 +76,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
             
     # Device's capacity (i.e. nominal power)
     cap = {}
-    for device in ["BOI", "CHP", "AC", "CC", "TES", "CTES", "AIR", "HP", "EH", "BAT", "PV"]:
+    for device in ["BOI", "CHP", "AC", "CC", "TES", "CTES", "AIRC", "HP", "EH", "BAT", "PV"]:
         cap[device] = model.addVar(vtype="C", name="nominal_capacity_" + str(device))
         
      # PV roof area
@@ -119,7 +119,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
     
     # Cooling power to/from devices
     cool = {}
-    for device in ["CC", "AC", "AIR"]:
+    for device in ["CC", "AC", "AIRC"]:
         cool[device] = {}
         for d in days:
             cool[device][d] = {}
@@ -207,7 +207,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
     
     # Device's capacity (i.e. nominal power)
     cap_dom = {}
-    for device in ["HP", "CC", "EH", "FRC", "AIR", "BOI", "TES"]:
+    for device in ["HP", "CC", "EH", "FRC", "AIRC", "BOI", "TES"]:
         cap_dom[device] = {}
         for n in nodes:
             cap_dom[device][n] = model.addVar(vtype="C", name="nominal_capacity_" + str(device) + "_n" + str(n))
@@ -254,7 +254,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
     
     # Cooling power to/from devices
     cool_dom = {}
-    for device in ["CC", "FRC", "AIR"]:
+    for device in ["CC", "FRC", "AIRC"]:
         cool_dom[device] = {}
         for n in nodes:
             cool_dom[device][n] = {}
@@ -299,30 +299,39 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
                 soc_dom[device][n][d][len(time_steps)] = model.addVar(vtype="C", name="soc_" + device + "_n" + str(n) + "_d" + str(d) + "_t" + str(len(time_steps)))
                 
    
-    # mass flows through free cooler / aircooler / bypass as share of total cooling cycle mass flow
-    x = {}
-    for device in ["FRC", "AIR", "BYP"]:
-        x[device] = {}
-        for n in nodes:
-            x[device][n] = {}
-            for d in days:
-                x[device][n][d] = {}
-                for t in time_steps:
-                    x[device][n][d][t] = model.addVar(vtype = "C", name="x_" + device + "_" + str(n) + "_d" + str(d) + "_t" + str(t))
+#    # mass flows through free cooler / aircooler / bypass as share of total cooling cycle mass flow
+#    x = {}
+#    for device in ["FRC", "AIRC", "BYP"]:
+#        x[device] = {}
+#        for n in nodes:
+#            x[device][n] = {}
+#            for d in days:
+#                x[device][n][d] = {}
+#                for t in time_steps:
+#                    x[device][n][d][t] = model.addVar(vtype = "C", name="x_" + device + "_" + str(n) + "_d" + str(d) + "_t" + str(t))
+#
+#
+#    # cooling power of aircooler and freecooler are divided into direct and recycled proportion
+#    for device in ["FRC"]:
+#        for prop in ["dir", "rec"]:
+#            cool_dom[device][prop] = {}
+#            for n in nodes:
+#                cool_dom[device][prop][n] = {}
+#                for d in days:
+#                    cool_dom[device][prop][n][d] = {}
+#                    for t in time_steps:
+#                        cool_dom[device][prop][n][d][t] = model.addVar(vtype="C", name="cool_" + device + "_" + prop + "_n" + str(n) + "_d" + str(d) + "_t" + str(t))
 
-
-    # cooling power of aircooler and freecooler are divided into direct and recycled proportion
-    for device in ["FRC", "AIR"]:
-        for prop in ["dir", "rec"]:
-            cool_dom[device][prop] = {}
-            for n in nodes:
-                cool_dom[device][prop][n] = {}
-                for d in days:
-                    cool_dom[device][prop][n][d] = {}
-                    for t in time_steps:
-                        cool_dom[device][prop][n][d][t] = model.addVar(vtype="C", name="cool_" + device + "_" + prop + "_n" + str(n) + "_d" + str(d) + "_t" + str(t))
-
-
+    # temperature between air cooler and free cooler
+    T_inter = {}
+    for n in nodes:
+        T_inter[n] = {}
+        for d in days:
+            T_inter[n][d] = {}
+            for t in time_steps:
+                T_inter[n][d][t] = model.addVar(vtype="C", name="t_out_airc_n"+str(n)+"_d"+str(d)+"_t"+str(t))
+    
+    
     # Energy flows at peak time
     peak_dom = {}
     for device in ["HP", "EH", "BOI", "CC", "FRC"]:
@@ -434,9 +443,9 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
     # Assure that real building peak loads are met
     for n in nodes:
         # heating
-        model.addConstr(peak_dom["EH"][n] + peak_dom["HP"][n] + peak_dom["BOI"][n] >= nodes[n]["peak"]["heat"])        
+        model.addConstr(peak_dom["EH"][n] + peak_dom["HP"][n] + peak_dom["BOI"][n] == nodes[n]["peak"]["heat"])        
         # cooling
-        model.addConstr(peak_dom["CC"][n] + peak_dom["FRC"][n] >= nodes[n]["peak"]["cool"])
+        model.addConstr(peak_dom["CC"][n] + peak_dom["FRC"][n] == nodes[n]["peak"]["cool"])
         
         # load constraints at peak time
         # peak loads <= device capacities
@@ -455,7 +464,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
             for d in days:
                 for t in time_steps:    
                         model.addConstr(soc_dom[device][n][d][t] <= cap_dom[device][n])
-            model.addConstr(soc_dom_init[device][n] <= cap_dom[device][n])  
+#            model.addConstr(soc_dom_init[device][n] <= cap_dom[device][n])  
     
     for n in nodes:
         for d in days:
@@ -464,7 +473,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
                 for device in ["HP", "EH", "BOI"]:
                     model.addConstr(heat_dom[device][n][d][t] <= cap_dom[device][n])
                 
-                for device in ["CC", "FRC", "AIR"]:
+                for device in ["CC", "FRC", "AIRC"]:
                     model.addConstr(cool_dom[device][n][d][t] <= cap_dom[device][n])
     
     
@@ -500,7 +509,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
                 model.addConstr(heat_dom["EH"][n][d][t] + heat_dom["HP"][n][d][t] + heat_dom["BOI"][n][d][t] + dch_dom["TES"][n][d][t]  == nodes[n]["heat"][d][t] + ch_dom["TES"][n][d][t] )  
         
                 # Cooling balance
-                model.addConstr(cool_dom["CC"][n][d][t] + cool_dom["FRC"][n][d][t] + cool_dom["AIR"][n][d][t] == nodes[n]["cool"][d][t] ) 
+                model.addConstr(cool_dom["CC"][n][d][t] + cool_dom["FRC"][n][d][t] + cool_dom["AIRC"][n][d][t] == nodes[n]["cool"][d][t] ) 
                 
                 # Electricity demands
                 model.addConstr(res_el[n][d][t] == power_dom["EH"][n][d][t] + power_dom["HP"][n][d][t] + power_dom["CC"][n][d][t])
@@ -522,13 +531,15 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
 #                model.addConstr(soc_dom_init[device][n] == 0)
                 
                 # Cyclic condition
-                model.addConstr(soc_dom[device][n][d][len(time_steps)] == soc_dom[device][n][d][0])
+                model.addConstr(soc_dom[device][n][d][0] == soc_dom[device][n][d][len(time_steps)-1] * (1-devs_dom[device]["sto_loss"])
+                        + (ch_dom[device][n][d][0] * devs_dom[device]["eta_ch"] 
+                        - dch_dom[device][n][d][0] / devs_dom[device]["eta_dch"]))
             
-                for t in np.arange(1,len(time_steps)+1):
+                for t in np.arange(1,len(time_steps)):
                     # Energy balance: soc(t) = soc(t-1) + charge - discharge
                     model.addConstr(soc_dom[device][n][d][t] == soc_dom[device][n][d][t-1] * (1-devs_dom[device]["sto_loss"])
-                        + (ch_dom[device][n][d][t-1] * devs_dom[device]["eta_ch"] 
-                        - dch_dom[device][n][d][t-1] / devs_dom[device]["eta_dch"]))
+                        + (ch_dom[device][n][d][t] * devs_dom[device]["eta_ch"] 
+                        - dch_dom[device][n][d][t] / devs_dom[device]["eta_dch"]))
             
 
     #%% FREE COOLING AND AIR COOLING RESTRICTIONS
@@ -539,39 +550,55 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
             
             for t in time_steps:
                 
-                # Sum of mass flows
-                model.addConstr( 1 == sum(x[device][n][d][t] for device in ["FRC", "AIR", "BYP"]))
-                
-                # free/air-cooler: sum direct cooling + recycled cooling
-                for device in ["FRC", "AIR"]:
-                    model.addConstr(cool_dom[device][n][d][t] == cool_dom[device]["dir"][n][d][t] + cool_dom[device]["rec"][n][d][t])
-                
-                
-                # air cooling
-                if t_air[d][t] + devs_dom["AIR"]["dT_min"] > nodes[n]["T_cooling_return"][d][t]:
-                    model.addConstr(x["AIR"][n][d][t] == 0)
-                    model.addConstr(cool_dom["AIR"][n][d][t] == 0)
-                else:
-                    model.addConstr(cool_dom["AIR"][n][d][t] == x["AIR"][n][d][t] * (nodes[n]["T_cooling_return"][d][t] - max((t_air[d][t] + devs_dom["AIR"]["dT_min"]), devs_dom["AIR"]["T_out_min"])) / (nodes[n]["T_cooling_return"][d][t] - nodes[n]["T_cooling_supply"][d][t] ) * nodes[n]["cool"][d][t] )                     
-                    # Check if recycling form free-cooler outlet to air-cooler inlet is possible
-                    if t_air[d][t] + devs_dom["AIR"]["dT_min"] > param["T_cold"][d][t] + devs_dom["FRC"]["dT_min"]:
-                        model.addConstr(cool_dom["AIR"]["rec"][n][d][t] == 0)
-                    else:
-                        model.addConstr(cool_dom["AIR"]["rec"][n][d][t] <= x["FRC"][n][d][t] * ((param["T_cold"][d][t] + devs_dom["FRC"]["dT_min"]) - (t_air[d][t] + devs_dom["AIR"]["dT_min"])) / (nodes[n]["T_cooling_return"][d][t] - nodes[n]["T_cooling_supply"][d][t] ) * nodes[n]["cool"][d][t] )
-                        
-                
-                # free cooling
-                if param["T_hot"][d][t] + devs_dom["FRC"]["dT_min"] > nodes[n]["T_cooling_return"][d][t]:
-                    model.addConstr(x["FRC"][n][d][t] == 0)
-                    model.addConstr(cool_dom["FRC"][n][d][t] == 0)
-                else:
-                    model.addConstr(cool_dom["FRC"]["dir"][n][d][t] == x["FRC"][n][d][t] * (nodes[n]["T_cooling_return"][d][t] - (param["T_cold"][d][t] + devs_dom["FRC"]["dT_min"])) / (nodes[n]["T_cooling_return"][d][t] - nodes[n]["T_cooling_supply"][d][t] ) * nodes[n]["cool"][d][t] )
-                    # Check if recycling from air-cooler outlet to free-cooler inlet is possible
-                    if param["T_hot"][d][t] + devs_dom["FRC"]["dT_min"] > t_air[d][t] + devs_dom["AIR"]["dT_min"]:
-                        model.addConstr(cool_dom["FRC"]["rec"][n][d][t] == 0)
-                    else:
-                        model.addConstr(cool_dom["FRC"]["rec"][n][d][t] <= x["AIR"][n][d][t] * ((t_air[d][t] + devs_dom["AIR"]["dT_min"]) - (param["T_cold"][d][t] + devs_dom["FRC"]["dT_min"])) / (nodes[n]["T_cooling_return"][d][t] - nodes[n]["T_cooling_supply"][d][t] ) * nodes[n]["cool"][d][t] )
+#                # Parallelschaltung von Luftkühler und Freikühler; Rückführung vom Luftkühleraustritt zum Freikühlereintritt
+#                
+#                # Sum of mass flows
+#                model.addConstr( 1 == sum(x[device][n][d][t] for device in ["FRC", "AIRC", "BYP"]))
+#                
+#                # free/air-cooler: sum direct cooling + recycled cooling
+#                for device in ["FRC"]:
+#                    model.addConstr(cool_dom[device][n][d][t] == cool_dom[device]["dir"][n][d][t] + cool_dom[device]["rec"][n][d][t])
+#                
+#                
+#                # air cooling
+#                if t_air[d][t] + devs_dom["AIRC"]["dT_min"] > nodes[n]["T_cooling_return"][d][t]:
+#                    model.addConstr(x["AIRC"][n][d][t] == 0)
+#                    model.addConstr(cool_dom["AIRC"][n][d][t] == 0)
+#                else:
+#                    model.addConstr(cool_dom["AIRC"][n][d][t] == x["AIRC"][n][d][t] * (nodes[n]["T_cooling_return"][d][t] - max((t_air[d][t] + devs_dom["AIRC"]["dT_min"]), devs_dom["AIRC"]["T_out_min"])) / (nodes[n]["T_cooling_return"][d][t] - nodes[n]["T_cooling_supply"][d][t] ) * nodes[n]["cool"][d][t] )                     
+#                
+#                # free cooling
+#                if param["T_hot"][d][t] + devs_dom["FRC"]["dT_min"] > nodes[n]["T_cooling_return"][d][t]:
+#                    model.addConstr(x["FRC"][n][d][t] == 0)
+#                    model.addConstr(cool_dom["FRC"][n][d][t] == 0)
+#                else:
+#                    model.addConstr(cool_dom["FRC"]["dir"][n][d][t] == x["FRC"][n][d][t] * (nodes[n]["T_cooling_return"][d][t] - (param["T_cold"][d][t] + devs_dom["FRC"]["dT_min"])) / (nodes[n]["T_cooling_return"][d][t] - nodes[n]["T_cooling_supply"][d][t] ) * nodes[n]["cool"][d][t] )
+#                    # Check if recycling from air-cooler outlet to free-cooler inlet is possible
+#                    if param["T_hot"][d][t] + devs_dom["FRC"]["dT_min"] > t_air[d][t] + devs_dom["AIRC"]["dT_min"]:
+#                        model.addConstr(cool_dom["FRC"]["rec"][n][d][t] == 0)
+#                    else:
+#                        model.addConstr(cool_dom["FRC"]["rec"][n][d][t] <= x["AIRC"][n][d][t] * ((t_air[d][t] + devs_dom["AIRC"]["dT_min"]) - (param["T_cold"][d][t] + devs_dom["FRC"]["dT_min"])) / (nodes[n]["T_cooling_return"][d][t] - nodes[n]["T_cooling_supply"][d][t] ) * nodes[n]["cool"][d][t] )
 
+                
+
+                 # Reihenschaltung von Luftkühler und Freikühler
+                 
+                 # air cooling
+                 if t_air[d][t] + devs_dom["AIRC"]["dT_min"] > nodes[n]["T_cooling_return"][d][t]:
+                     model.addConstr(cool_dom["AIRC"][n][d][t] == 0)
+                 else:
+                     model.addConstr(cool_dom["AIRC"][n][d][t] <= nodes[n]["cool"][d][t] * (nodes[n]["T_cooling_return"][d][t] - (t_air[d][t] + devs_dom["AIRC"]["dT_min"]))/(nodes[n]["T_cooling_return"][d][t] - nodes[n]["T_cooling_supply"][d][t]))                        
+       
+                 # free cooler
+                 if param["T_hot"][d][t] + devs_dom["FRC"]["dT_min"] > nodes[n]["T_cooling_return"][d][t]:
+                     model.addConstr(cool_dom["FRC"][n][d][t] == 0)
+                 else:
+                     # Priorize free cooler by limitation of air cooler
+                     model.addConstr(cool_dom["AIRC"][n][d][t] <= nodes[n]["cool"][d][t] * (nodes[n]["T_cooling_return"][d][t] - (param["T_hot"][d][t] + devs_dom["FRC"]["dT_min"]))/(nodes[n]["T_cooling_return"][d][t] - nodes[n]["T_cooling_supply"][d][t]))
+                     # sum of free cooler and air cooler
+                     model.addConstr( cool_dom["AIRC"][n][d][t] + cool_dom["FRC"][n][d][t] <=  nodes[n]["cool"][d][t] * (nodes[n]["T_cooling_return"][d][t] - (param["T_cold"][d][t] + devs_dom["FRC"]["dT_min"]))/(nodes[n]["T_cooling_return"][d][t] - nodes[n]["T_cooling_supply"][d][t]))
+                
+                
     #%% RESIDUAL THERMAL LOADS
     
     for n in nodes:
@@ -607,9 +634,9 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
         for n in nodes:  
             model.addConstr(cap_dom["FRC"][n] == 0 )
 
-    if param["use_air_in_bldgs"] == 0:       
+    if param["use_airc_in_bldgs"] == 0:       
         for n in nodes:  
-            model.addConstr(cap_dom["AIR"][n] == 0 )
+            model.addConstr(cap_dom["AIRC"][n] == 0 )
             
     if param["use_tes_in_bldgs"] == 0:       
         for n in nodes:  
@@ -679,6 +706,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
     # PV
     for device in ["PV"]:            
         model.addConstr(area[device] <= devs[device]["max_area"])
+        # conversion from area to peak power; cap["PV"] is only needed for investment costs
         model.addConstr(cap[device] == area[device] * devs[device]["G_stc"]/1e6 * devs[device]["eta_el_stc"])    
     
     # Storages    
@@ -709,7 +737,8 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
     for device in ["TES", "CTES", "BAT"]:
         for day in year:
             for t in time_steps:    
-                model.addConstr(soc[device][day][t] <= cap[device])
+                model.addConstr(soc[device][day][t] <= devs[device]["max_soc"] * cap[device])
+                model.addConstr(soc[device][day][t] >= devs[device]["min_soc"] * cap[device])
 
     for device in ["TES", "CTES", "BAT"]:
         for d in days:
@@ -725,7 +754,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
             for device in ["CHP"]:
                 model.addConstr(power[device][d][t] <= cap[device])
             
-            for device in ["CC", "AC", "AIR"]:
+            for device in ["CC", "AC", "AIRC"]:
                 model.addConstr(cool[device][d][t] <= cap[device])
     
             # limitation of power from and to grid   
@@ -736,13 +765,13 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
     # Air cooler temperature constraints
     for d in days:
         for t in time_steps:
-            if t_air[d][t] + devs["AIR"]["dT_min"] > param["T_hot"][d][t]:
-                model.addConstr(cool["AIR"][d][t] == 0)
+            if t_air[d][t] + devs["AIRC"]["dT_min"] > param["T_hot"][d][t]:
+                model.addConstr(cool["AIRC"][d][t] == 0)
             else:
                 if param["switch_single_balance"]:
-                    model.addConstr( cool["AIR"][d][t] <= ( -residual["thermal"][d][t] + heat["BOI"][d][t] + heat["CHP"][d][t] + heat["HP"][d][t] + heat["EH"][d][t] + dch["TES"][d][t]) * (param["T_hot"][d][t] - (t_air[d][t] + devs["AIR"]["dT_min"]))/ (param["T_hot"][d][t] - param["T_cold"][d][t] ))
+                    model.addConstr( cool["AIRC"][d][t] <= ( -residual["thermal"][d][t] + heat["BOI"][d][t] + heat["CHP"][d][t] + heat["HP"][d][t] + heat["EH"][d][t] + dch["TES"][d][t]) * (param["T_hot"][d][t] - (t_air[d][t] + devs["AIRC"]["dT_min"]))/ (param["T_hot"][d][t] - param["T_cold"][d][t] ))
                 else:
-                    model.addConstr( cool["AIR"][d][t] <=  residual["cool"][d][t] * (param["T_hot"][d][t] - (t_air[d][t] + devs["AIR"]["dT_min"]))/ (param["T_hot"][d][t] - param["T_cold"][d][t] ))
+                    model.addConstr( cool["AIRC"][d][t] <=  residual["cool"][d][t] * (param["T_hot"][d][t] - (t_air[d][t] + devs["AIRC"]["dT_min"]))/ (param["T_hot"][d][t] - param["T_cold"][d][t] ))
             
     #%% INPUT / OUTPUT CONSTRAINTS
     for t in time_steps:
@@ -779,6 +808,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
         for day in year:        
             
             for t in np.arange(1, len(time_steps)):
+                
                 # Energy balance: soc(t) = soc(t-1) + charge - discharge
                 model.addConstr(soc[device][day][t] == soc[device][day][t-1] * (1-devs[device]["sto_loss"])
                     + ch[device][sigma[day]][t] * devs[device]["eta_ch"] 
@@ -804,7 +834,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
  
             if param["switch_single_balance"]:
                 # Thermal balance (combined heating and cooling balance)
-                model.addConstr(heat["BOI"][d][t] + heat["CHP"][d][t] + heat["HP"][d][t] + heat["EH"][d][t] + dch["TES"][d][t] - cool["AC"][d][t] - cool["CC"][d][t] - cool["AIR"][d][t] - dch["CTES"][d][t] == residual["thermal"][d][t]  + heat["AC"][d][t] + ch["TES"][d][t] - ch["CTES"][d][t])
+                model.addConstr(heat["BOI"][d][t] + heat["CHP"][d][t] + heat["HP"][d][t] + heat["EH"][d][t] + dch["TES"][d][t] - cool["AC"][d][t] - cool["CC"][d][t] - cool["AIRC"][d][t] - dch["CTES"][d][t] == residual["thermal"][d][t]  + heat["AC"][d][t] + ch["TES"][d][t] - ch["CTES"][d][t])
             
             else: # Seperated heating and cooling balance
             
@@ -812,7 +842,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
                 model.addConstr(heat["BOI"][d][t] + heat["CHP"][d][t] + heat["HP"][d][t] + heat["EH"][d][t] + dch["TES"][d][t] == residual["heat"][d][t] + heat["AC"][d][t] + ch["TES"][d][t] )
     
                 # Cooling balance
-                model.addConstr(cool["AC"][d][t] + cool["CC"][d][t] + cool["AIR"][d][t] + dch["CTES"][d][t] == residual["cool"][d][t] + ch["CTES"][d][t] ) 
+                model.addConstr(cool["AC"][d][t] + cool["CC"][d][t] + cool["AIRC"][d][t] + dch["CTES"][d][t] == residual["cool"][d][t] + ch["CTES"][d][t] ) 
                 
                 
             
@@ -870,8 +900,8 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
                 model.addConstr(ch["BAT"][d][t] == 0)
                 model.addConstr(dch["BAT"][d][t] == 0)   
         
-    if not param["feasible_AIR"]: 
-        model.addConstr(cap["AIR"] == 0)
+    if not param["feasible_AIRC"]: 
+        model.addConstr(cap["AIRC"] == 0)
     
     if not param["feasible_BOI"]: 
         model.addConstr(cap["BOI"] == 0)   
@@ -909,7 +939,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
                     model.addConstr( dch[dev][d][t] == 0 )
                     
         # deactivate all building devices except for EH, HP, CC
-        for dev in ["BOI", "FRC", "AIR", "TES"]:
+        for dev in ["BOI", "FRC", "AIRC", "TES"]:
             for n in nodes:
                 model.addConstr( cap_dom[dev][n] == 0)
         for dev in ["TES"]:
@@ -938,7 +968,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
         # Investment costs
         for device in ["BOI", "CHP", "AC", "CC", "TES", "CTES", "HP"]:
             model.addConstr( inv[device] == sum(lin[device][i] * devs[device]["inv_i"][i] for i in range(len(devs[device]["cap_i"]))) )
-        for device in ["EH", "AIR", "BAT", "PV"]:
+        for device in ["EH", "AIRC", "BAT", "PV"]:
             model.addConstr(inv[device] == devs[device]["inv_var"] * cap[device])            
     else:
         for device in all_devs:
@@ -1031,7 +1061,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
             nodes[n]["eh_capacity"] = cap_dom["EH"][n].X
             nodes[n]["boi_capacity"] = cap_dom["BOI"][n].X
             nodes[n]["tes_capacity"] = cap_dom["TES"][n].X
-            nodes[n]["air_capacity"] = cap_dom["AIR"][n].X
+            nodes[n]["air_capacity"] = cap_dom["AIRC"][n].X
             nodes[n]["frc_capacity"] = cap_dom["FRC"][n].X
             
             # save residual loads in nodes

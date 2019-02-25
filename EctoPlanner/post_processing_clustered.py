@@ -61,8 +61,8 @@ def run(dir_results):
     # Plot building sum
     plot_flexibility(file, param, nodes, dir_plots + "\\flexibility")
     
-    # Plot sorted annual load curve of grid interaction
-    plot_grid_interaction(file, param, dir_plots + "\\sorted_load_curves")
+    # Plot sorted annual load curves
+    plot_sorted_curves(file, param, dir_plots + "\\sorted_load_curves")
 
     # Plot cost structure
     plot_costs(file, param, nodes, dir_plots)
@@ -140,17 +140,19 @@ def calc_KPIs(file, nodes, param, dir_results):
     
     # Network
     # Sum up building residual loads
-    subs_heating_demand = np.zeros((n_days, len(time_steps)))
-    subs_cooling_demand = np.zeros((n_days, len(time_steps)))
+    network_heating_demand = {}
+    network_cooling_demand = {}
     for n in nodes:
+        network_heating_demand[n] = np.zeros((n_days, len(time_steps)))
+        network_cooling_demand[n] = np.zeros((n_days, len(time_steps)))
         res_thermal = read_energy_flow(file, "residual_thermal", n, param)
         for d in range(n_days):
             for t in time_steps:
                 if res_thermal[d][t] > 0:
-                    subs_heating_demand[d][t] += res_thermal[d][t]
+                    network_heating_demand[n][d][t] += res_thermal[d][t]
                 else:
-                    subs_cooling_demand[d][t] += -res_thermal[d][t] 
-    dict_KPI["DOC_N"] = ( 2 * sum(sum( min(subs_heating_demand[d][t], subs_cooling_demand[d][t]) * param["day_weights"][d] for d in range(n_days)) for t in time_steps)) / (sum(sum((subs_heating_demand[d][t] + subs_cooling_demand[d][t]) * param["day_weights"][d] for d in range(n_days)) for t in time_steps))                      
+                    network_cooling_demand[n][d][t] += -res_thermal[d][t] 
+    dict_KPI["DOC_N"] = ( 2 * sum(sum( min( sum( network_heating_demand[n][d][t] for n in nodes), sum(network_cooling_demand[n][d][t] for n in nodes)) * param["day_weights"][d] for d in range(n_days)) for t in time_steps)) / (sum(sum(sum((network_heating_demand[n][d][t] + network_cooling_demand[n][d][t]) * param["day_weights"][d] for n in nodes) for d in range(n_days)) for t in time_steps))                      
     
     
     
@@ -179,8 +181,8 @@ def calc_KPIs(file, nodes, param, dir_results):
     
     
     
-    # Energetic System COP
-    dict_KPI["COP_system"] = (dem_heat + dem_cool + to_grid_total) / (gas_total + from_grid_total + pv_total)
+    # Energetic System figure of merit (FOM)
+    dict_KPI["FOM_system"] = (dem_heat + dem_cool + to_grid_total) / (gas_total + from_grid_total + pv_total)
     
     
     # CO2 - Emissions [kg/MWh_th]
@@ -198,7 +200,8 @@ def calc_KPIs(file, nodes, param, dir_results):
     # Write txt
     with open(dir_results + "\KPIs.txt", "w") as outfile:
         outfile.write("KPIs of the bidirectional system \n")
-        outfile.write("-------------------------------- \n\n\n")
+        outfile.write("-------------------------------- \n")
+        outfile.write(dir_results +  "\n\n\n")
         
         outfile.write("Demand Overlap Coefficients \n")
         outfile.write("--------------------------- \n")
@@ -213,8 +216,8 @@ def calc_KPIs(file, nodes, param, dir_results):
         
         outfile.write("System efficiency \n")  
         outfile.write("----------------- \n")
-        outfile.write("Exergetic efficiency:   " + str(round(dict_KPI["eta_ex"],3)) + "\n")
-        outfile.write("System COP:             " + str(round(dict_KPI["COP_system"],3)) + "\n\n\n")
+        outfile.write("Exergetic efficiency:       " + str(round(dict_KPI["eta_ex"],3)) + "\n")
+        outfile.write("Energetic figure of merit:  " + str(round(dict_KPI["FOM_system"],3)) + "\n\n\n")
     
         outfile.write("Ecological KPIs \n")  
         outfile.write("----------------- \n")
@@ -236,9 +239,9 @@ def calc_KPIs(file, nodes, param, dir_results):
 def plot_costs(file, param, nodes, dir_costs):
     
     
-    all_devs = ["BOI", "CHP", "AC", "CC", "TES", "CTES", "AIR", "HP", "EH", "BAT", "PV"] 
+    all_devs = ["BOI", "CHP", "AC", "CC", "TES", "CTES", "AIRC", "HP", "EH", "BAT", "PV"] 
         
-    all_devs_dom = ["HP", "CC", "EH", "FRC", "AIR", "BOI", "TES"]  
+    all_devs_dom = ["HP", "CC", "EH", "FRC", "AIRC", "BOI", "TES"]  
 
     
     # Read costs 
@@ -357,19 +360,23 @@ def plot_costs(file, param, nodes, dir_costs):
     
     fig.savefig(fname = dir_costs + "\cost_structure.png", dpi = 200, format = "png", bbox_inches="tight", pad_inches=0.1)    
     
+
+    print("All plots created!")
+
     
     
 #%%    
 
-def plot_grid_interaction(file, param, dir_grid):
+def plot_sorted_curves(file, param, dir_grid):
     
     
-    print("Creating grid interaction plots...")
+    print("Creating sorted load curves...")
 
     if not os.path.exists(dir_grid):
         os.makedirs(dir_grid)   
           
-    series = ["power_to_grid", "power_from_grid"]
+    series = ["power_to_grid", "power_from_grid",
+              "power_CHP"]
 
     # Read grid feed-in    
     clustered = {}
@@ -379,15 +386,13 @@ def plot_grid_interaction(file, param, dir_grid):
     # Arrange full time series with 8760 steps
     full = {}
     for item in series:
-        full[item] = np.zeros(8760)
-   
+        full[item] = np.zeros(8760)   
     # get List of days used as type-days
     z = param["day_matrix"]
     typedays = []
     for d in range(365):
         if any(z[d]):
-            typedays.append(d)
-            
+            typedays.append(d)            
     # Arrange time series
     for d in range(365):
         match = np.where(z[:,d] == 1)[0][0]
@@ -396,27 +401,35 @@ def plot_grid_interaction(file, param, dir_grid):
             full[item][24*d:24*(d+1)] = clustered[item][typeday,:]
         
     
-    # Sort grid feed-in descending
-    to_grid_sorted = np.sort(full["power_to_grid"])[::-1]
-    from_grid_sorted = np.sort(full["power_from_grid"])[::-1]
+    # Sort time series descending
+    sort = {}
+    for item in series:
+        sort[item] = np.sort(full[item])[::-1]
     
-   
+    
+    # Plot power from grid and power to grid   
     fig = plt.figure()        
-
-    # Plot sum of heating balances
-    ax = fig.add_subplot(1,1,1, ylabel = "Feed-in [MW]", xlabel="Hours") 
-    ax.plot(range(8760), to_grid_sorted, color="black", linewidth=2, label="power to grid")
-    ax.plot(range(8760), from_grid_sorted, color="red", linewidth=2, label = "power from grid")
+    ax = fig.add_subplot(1,1,1, ylabel = "grid power [MW]", xlabel="Hours") 
+    ax.plot(range(8760), sort["power_to_grid"], color="black", linewidth=2, label="power to grid")
+    ax.plot(range(8760), sort["power_from_grid"], color="red", linewidth=2, label = "power from grid")
     ax.set_xlim(0,8760)
     ax.legend()
-    ax.grid()
-#    plt.show()
-    
-    fig.savefig(fname = dir_grid + "\grid_sorted_curve.png", dpi = 200, format = "png", bbox_inches="tight", pad_inches=0.1)
-    
+    ax.grid()   
+    fig.savefig(fname = dir_grid + "\grid_sorted_curve.png", dpi = 200, format = "png", bbox_inches="tight", pad_inches=0.1)    
     plt.close()
+ 
+    # Plot CHP load  
+    fig = plt.figure()        
+    ax = fig.add_subplot(1,1,1, ylabel = "CHP power [MW]", xlabel="Hours") 
+    ax.plot(range(8760), sort["power_CHP"], color="black", linewidth=2, label="power CHP")
+    ax.set_xlim(0,8760)
+    ax.legend()
+    ax.grid()   
+    fig.savefig(fname = dir_grid + "\CHP_sorted_curve.png", dpi = 200, format = "png", bbox_inches="tight", pad_inches=0.1)    
+    plt.close()    
     
-    
+
+    print("All plots created!")    
     
     
 #%%    
@@ -528,11 +541,11 @@ def plot_balancing_matrix(file, param, nodes, dir_balancing):
 #    mng.window.state('zoomed')
 #    plt.show()
     
-    fig.savefig(fname = dir_balancing + "\matrix_balancing.png", dpi = 600, format = "png", bbox_inches="tight", pad_inches=0.1)
-    
+    fig.savefig(fname = dir_balancing + "\matrix_balancing.png", dpi = 600, format = "png", bbox_inches="tight", pad_inches=0.1)    
     plt.close()
-
     
+
+    print("All plots created!")    
 
                     
 
@@ -572,7 +585,7 @@ def plot_flexibility(file, param, nodes, dir_sum):
                      "cool_CC",
                      "cool_AC", "heat_AC",
                      "dch_CTES", "ch_CTES", "soc_CTES",
-                     "cool_AIR",
+                     "cool_AIRC",
                      "power_PV"
                      ]
     
@@ -654,7 +667,7 @@ def plot_flexibility(file, param, nodes, dir_sum):
         # BU Cooling balance
         ax = fig.add_subplot(5,1,3, ylabel = "Cool [MW]")         
         # Sources
-        cool_sources = ["cool_CC", "cool_AC", "cool_AIR", "dch_CTES"]
+        cool_sources = ["cool_CC", "cool_AC", "cool_AIRC", "dch_CTES"]
         plot_series = np.zeros((len(cool_sources), len(time_steps)))
         for k in range(len(cool_sources)):
             plot_series[k,:] = series_BU[cool_sources[k]][d]
@@ -743,8 +756,8 @@ def plot_capacities(file, param, nodes, dir_caps):
         os.makedirs(dir_caps)     
     
     # Plot buildings devices
-    all_devs_dom = ["HP", "EH","BOI", "CC", "FRC", "AIR"]
-    all_flows = ["heat_HP", "heat_EH", "heat_BOI", "cool_CC", "cool_FRC", "cool_AIR"]
+    all_devs_dom = ["HP", "EH","BOI", "CC", "FRC", "AIRC"]
+    all_flows = ["heat_HP", "heat_EH", "heat_BOI", "cool_CC", "cool_FRC", "cool_AIRC"]
     
     ind = np.arange(len(all_devs_dom))
     plot_colors = tuple(dev_colors[dev] for dev in all_devs_dom)
@@ -828,8 +841,8 @@ def plot_capacities(file, param, nodes, dir_caps):
     plt.close(fig)    
         
     # plot BU capacities
-    all_devs = ["BOI", "CHP", "HP", "EH", "CC", "AC", "AIR"]
-    all_flows = ["heat_BOI", "power_CHP", "heat_HP", "heat_EH", "cool_CC", "cool_AC", "cool_AIR"]
+    all_devs = ["BOI", "CHP", "HP", "EH", "CC", "AC", "AIRC"]
+    all_flows = ["heat_BOI", "power_CHP", "heat_HP", "heat_EH", "cool_CC", "cool_AC", "cool_AIRC"]
     
     ind = np.arange(len(all_devs))
     plot_colors = tuple(dev_colors[dev] for dev in all_devs)
@@ -851,8 +864,8 @@ def plot_capacities(file, param, nodes, dir_caps):
     BU_caps = tuple(caps[dev] for dev in all_devs)
     
     plot = plt.bar(ind, BU_caps, color=plot_colors, edgecolor="k")
-    plt.xticks(ind, ["BOI", "CHP", "HP", "EH", "CC", "AC", "AIR"])
-    plt.legend(plot, ("BOI", "CHP", "HP", "EH", "CC", "AC", "AIR"), loc="upper center",ncol=4, fontsize=7)
+    plt.xticks(ind, ["BOI", "CHP", "HP", "EH", "CC", "AC", "AIRC"])
+    plt.legend(plot, ("BOI", "CHP", "HP", "EH", "CC", "AC", "AIRC"), loc="upper center",ncol=4, fontsize=7)
     y_max = ax.get_ylim()[1]
     ax.set_ylim(top=1.25*y_max)
     
@@ -867,7 +880,7 @@ def plot_capacities(file, param, nodes, dir_caps):
     gens = tuple(total[flow] for flow in all_flows)
     
     plot = plt.bar(ind, gens, color=plot_colors, edgecolor="k")
-    plt.xticks(ind, ["BOI", "CHP", "HP", "EH", "CC", "AC", "AIR"])   
+    plt.xticks(ind, ["BOI", "CHP", "HP", "EH", "CC", "AC", "AIRC"])   
     y_max = ax.get_ylim()[1]
     ax.set_ylim(top=1.25*y_max)
     
@@ -969,7 +982,7 @@ def plot_bldg_balancing(file, param, nodes, dir_plots):
                  "dch_TES", "ch_TES",
                  "cool_CC", "power_CC",
                  "cool_FRC", 
-                 "cool_AIR",
+                 "cool_AIRC",
                  ]
     
     # list of all demands
@@ -1021,7 +1034,7 @@ def plot_bldg_balancing(file, param, nodes, dir_plots):
             # Cooling balance
             ax = fig.add_subplot(2,1,2, ylabel = "Cool [kW]")         
             # Sources
-            cool_sources = ["cool_CC", "cool_FRC", "cool_AIR"]
+            cool_sources = ["cool_CC", "cool_FRC", "cool_AIRC"]
             plot_series = np.zeros((len(cool_sources), len(time_steps)))
             for k in range(len(cool_sources)):
                 plot_series[k,:] = series[cool_sources[k]][d]
@@ -1057,7 +1070,7 @@ def plot_BU_balances(file, param, dir_plots):
                  "cool_CC", "power_CC",
                  "cool_AC", "heat_AC",
                  "dch_CTES", "ch_CTES",
-                 "cool_AIR",
+                 "cool_AIRC",
                  "power_from_grid", "power_to_grid",
                  "power_PV",
                  "dch_BAT", "ch_BAT"
@@ -1115,7 +1128,7 @@ def plot_BU_balances(file, param, dir_plots):
         # Cooling balance
         ax = fig.add_subplot(3,1,2, ylabel = "Cool [MW]")         
         # Sources
-        cool_sources = ["cool_CC", "cool_AC", "cool_AIR", "dch_CTES"]
+        cool_sources = ["cool_CC", "cool_AC", "cool_AIRC", "dch_CTES"]
         plot_series = np.zeros((len(cool_sources), len(time_steps)))
         for k in range(len(cool_sources)):
             plot_series[k,:] = series[cool_sources[k]][d]
@@ -1294,8 +1307,8 @@ def get_compColor():
     compColor["FRC"] = (0.529, 0.706, 0.882, 0.8)
     compColor["cool_FRC"] = compColor["FRC"]
     
-    compColor["AIR"] = (0.749, 0.749, 0.749, 1)
-    compColor["cool_AIR"] = compColor["AIR"]
+    compColor["AIRC"] = (0.749, 0.749, 0.749, 1)
+    compColor["cool_AIRC"] = compColor["AIRC"]
     
     compColor["HYB"] = compColor["HP"]
     compColor["cool_HYB"] = compColor["HYB"]    

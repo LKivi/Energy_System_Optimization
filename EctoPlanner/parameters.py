@@ -17,7 +17,7 @@ import random
 import clustering_medoid as clustering
 
 
-def load_params(use_case, path_file, scenario):
+def load_params(use_case, path_file, scenario, dem = None):
     
     assert (use_case != "FZJ" or use_case != "DOC_plots"), "Use case '" + use_case + "' not known."
     path_input = path_file + "\\input_data\\" + use_case + "\\"
@@ -75,10 +75,7 @@ def load_params(use_case, path_file, scenario):
              
         # Maximum thermal storage sizes
         for n in nodes:
-             if nodes[n]["name"] in ["16.3", "16.4", "04.1"]:
-                 nodes[n]["V_TES_max"] = 25     # m^3                 
-             else:
-                 nodes[n]["V_TES_max"] = 10     # m^3  
+            nodes[n]["V_TES_max"] = 10     # m^3  
                  
             
             
@@ -90,28 +87,26 @@ def load_params(use_case, path_file, scenario):
     if use_case == "DOC_plots":
         
         nodes = {}
-        time_steps = np.arange(8760)
-        
-        # demand amplitudes
-        max_heat = 2000
-        max_cool = 2000
-        
-        # phase shift of cos^2 - function (0...4380)
-        shift = 4380
+        time_steps = np.arange(8760)        
         
         # heat node
         nodes[0] = {"number": 0,
                     "name": "heating_node",
-                    "heat": max_heat * np.cos(np.pi/8760 * time_steps)**2,
+                    "heat": np.zeros(len(time_steps)),
                     "cool": np.zeros(len(time_steps))
                     }
-        
+
         # cool node
         nodes[1] = {"number": 1,
                     "name": "cooling_node",
                     "heat": np.zeros(len(time_steps)),
-                    "cool": max_cool * np.sin(np.pi/8760 * (time_steps - shift))**2
+                    "cool": np.zeros(len(time_steps))
                     }
+        
+        # Load heating and cooling demands
+        nodes[0]["heat"] = dem["heat"]*1000
+        nodes[1]["cool"] = dem["cool"]*1000
+        
         
         # Assign building temperatures
         for n in nodes:
@@ -125,9 +120,9 @@ def load_params(use_case, path_file, scenario):
 #        plt.plot(time_steps, nodes[1]["cool"])
         
         
-        # Calculate DOC
-        DOC =  2 * sum( min(nodes[0]["heat"][t], nodes[1]["cool"][t]) for t in time_steps) / sum(nodes[0]["heat"][t] + nodes[1]["cool"][t] for t in time_steps)
-        print(DOC)
+#        # Calculate DOC
+#        DOC =  2 * sum( min(nodes[0]["heat"][t], nodes[1]["cool"][t]) for t in time_steps) / sum(nodes[0]["heat"][t] + nodes[1]["cool"][t] for t in time_steps)
+#        print(DOC)
         
 
 
@@ -163,7 +158,7 @@ def load_params(use_case, path_file, scenario):
              "use_eh_in_bldgs": 1,                 # ---,          should electric heaters be used in buildings?
              "use_boi_in_bldgs": 0,                # ---,          should boilers be used in buildings?
              "use_frc_in_bldgs": 1,                # ---,          should free coolers be used in buildings?
-             "use_air_in_bldgs": 1,                # ---,          should air coolers be used in buildings?
+             "use_airc_in_bldgs": 1,                # ---,          should air coolers be used in buildings?
              "use_cc_in_bldgs": 1,                 # ---,          should compression chillers be used in buildings?
              "use_hp_in_bldgs": 1,
              "use_tes_in_bldgs": 1,
@@ -179,7 +174,7 @@ def load_params(use_case, path_file, scenario):
              "feasible_EH": 1,              # ---,          are electric heater feasible for BU?
              "feasible_CC": 1,              # ---,          are compression chiller feasible for BU?
              "feasible_AC": 1,              # ---,          are absorption chiller feasible for BU?
-             "feasible_AIR": 1,             # ---,          are air coolers feasible for BU?
+             "feasible_AIRC": 1,             # ---,          are air coolers feasible for BU?
              "feasible_HP": 0,               # ---,          are heat pumps feasible for BU?
              "feasible_PV": 1
              }
@@ -590,7 +585,7 @@ def load_params(use_case, path_file, scenario):
                             } 
 
     #%% AIR COOLER 
-    devs["AIR"] = {
+    devs["AIRC"] = {
                         "dT_min": 10,
                         "life_time": 20,        # a,        operation time (VDI 2067)
                         "cost_om": 0.06,       #---,       annual operation and maintenance as share of investment (VDI)
@@ -615,6 +610,8 @@ def load_params(use_case, path_file, scenario):
                        "min_cap": 0,        # MWh_th,           minimum thermal storage capacity  
                        "max_ch": 0.25,      # 1/h,              maximum soc change per hour by charging
                        "max_dch": 0.25,     # 1/h,              maximum soc change per hour by discharging
+                       "min_soc": 0,
+                       "max_soc": 1,
                        "sto_loss": 0.005,    # 1/h,              standby losses over one time step
                        "eta_ch": 0.95,       # ---,              charging efficiency
                        "eta_dch": 0.95,      # ---,              discharging efficiency
@@ -661,6 +658,8 @@ def load_params(use_case, path_file, scenario):
                    "max_cap": 10,           # MWh_el,           maximum eletrical storage capacity
                    "max_ch": 0.333,         # 1/h,              maximum soc change per hour by charging
                    "max_dch": 0.333,        # 1/h,              maximum soc change per hour by discharging
+                   "min_soc": 0.2,
+                   "max_soc": 0.8,
                    "sto_loss": 0.001,       # 1/h,              standby losses over one time step
                    "eta_ch": 0.96,          # ---,              charging efficiency      
                    "eta_dch": 0.96,         # ---,              discharging efficiency
@@ -751,22 +750,22 @@ def load_params(use_case, path_file, scenario):
                             "cost_om": 0.03,       #---,   annual operation and maintenance as share of investment 
                             } 
     
-    devs_dom["AIR"] = {
+    devs_dom["AIRC"] = {
                             "dT_min": 10,         # K,       minimum temeprature difference between air and cooling water
                             "life_time": 20,      # a,       operation time (VDI 2067)
                             "inv_var": 65,        # EUR/kW,  domestic air cooler investment costs (BMVBS)
                             "inv_fix": 0,         # EUR
                             "cost_om": 0.06,     #---,      annual operation and maintenance as share of investment (VDI)
-                            "T_out_min": 1,       # °C,      minimum outlet temperature (to prevent freezing)
+#                            "T_out_min": 2,       # °C,      minimum outlet temperature (to prevent freezing)
                             } 
 
     
     devs_dom["TES"] =      {
                            "T_max": 90,         # °C,               maximum storage temperature     
                            "T_min": 62,         # °C,               minimal storage temperature      
-                           "sto_loss": 0,       # 1/h,              standby losses over one time step
-                           "eta_ch": 1,         # ---,              charging efficiency
-                           "eta_dch": 1,        # ---,              discharging efficiency
+                           "sto_loss": 0.005,       # 1/h,              standby losses over one time step
+                           "eta_ch": 0.95,         # ---,              charging efficiency
+                           "eta_dch": 0.95,        # ---,              discharging efficiency
                            "life_time": 20,     # a,                operation time (VDI 2067 Trinkwasserspeicher)
                            "inv_vol": 641.2,    # EUR/m^3           investment costs per m^3 storage volume
                            "inv_fix": 0,        # EUR
