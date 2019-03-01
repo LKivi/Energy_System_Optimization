@@ -52,16 +52,16 @@ use_case = "DOC_plots"
 
 # Choose scenario
  
-#scenario = "stand_alone"                     # stand-alone supply
+scenario = "stand_alone"                     # stand-alone supply
 #scenario = "conventional_DHC"                # conventional, separated heating and cooling network
-scenario = "Ectogrid_min"                    # bidirectional network with conventional BU devices and minumum building equipment
+#scenario = "Ectogrid_min"                    # bidirectional network with conventional BU devices and minumum building equipment
 #scenario = "Ectogrid_full"                   # bidirectional network with full BU & building equipment
 
 
 
 dict_result = {}
 dict_result["DOC_dem"] = {}
-KPI_list = ["DOC_N", "supply_costs", "eta_ex", "COP_system", "co2_spec", "PE_spec"]
+KPI_list = ["supply_costs", "eta_ex", "FOM_system", "co2_spec", "PE_spec"]
 for KPI in KPI_list:
     dict_result[KPI] = {}
 
@@ -73,14 +73,15 @@ time_steps = range(T)
 
 # Peak loads MW
 peak = {}
-peak["heat"] = 2.25
-peak["cool"] = 2.25
+peak["heat"] = 2
+peak["cool"] = 2
 
 # yearly demands MWh
 # demand has to be lower than peak*8760h !!
+# demand wihtout curve compression and minimum value = 0: peak * 4380
 total = {}
-total["heat"] = 9855
-total["cool"] = 9855
+total["heat"] = 8760
+total["cool"] = 8760
 
 # Calculate parameters for load curves
 A = {}    # amplitude
@@ -103,7 +104,7 @@ dem = calc_dem(peak, total, A, B, C)
 DOC_ref = 2*np.sum(min(dem["heat"][t], dem["cool"][t]) for t in time_steps) / np.sum((dem["heat"][t] + dem["cool"][t]) for t in time_steps)
 
 # Number of iterations and number of cutting steps
-N = 2
+N = 10
 N_cut = int(DOC_ref*N)
 
 for item in dict_result:
@@ -143,10 +144,10 @@ for i in range(N+1):
     dem["heat"] = np.roll(dem["heat"], int(T/2 * shift))
     
     
-    # Plot load curves
-    fig = plt.figure()
-    plt.plot(time_steps, dem["heat"])
-    plt.plot(time_steps, dem["cool"])
+#    # Plot load curves
+#    fig = plt.figure()
+#    plt.plot(time_steps, dem["heat"])
+#    plt.plot(time_steps, dem["cool"])
     
     
     # Define paths

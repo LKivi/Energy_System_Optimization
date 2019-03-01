@@ -68,7 +68,7 @@ def load_params(use_case, path_file, scenario, dem = None):
              # Data centres have higher cooling return temperatures 
              if nodes[n]["name"] in ["16.3", "16.4"]:
                  nodes[n]["T_cooling_supply"] = 16 * np.ones(8760)
-                 nodes[n]["T_cooling_return"] = 40 * np.ones(8760)
+                 nodes[n]["T_cooling_return"] = 30 * np.ones(8760)
              else:
                  nodes[n]["T_cooling_supply"] = 16 * np.ones(8760)
                  nodes[n]["T_cooling_return"] = 20 * np.ones(8760)                   
@@ -111,10 +111,10 @@ def load_params(use_case, path_file, scenario, dem = None):
         # Assign building temperatures
         for n in nodes:
             nodes[n]["T_cooling_supply"] = 16 * np.ones(8760)
-            nodes[n]["T_cooling_return"] = 40 * np.ones(8760)
+            nodes[n]["T_cooling_return"] = 30 * np.ones(8760)
             nodes[n]["T_heating_supply"] = 60 * np.ones(8760)
             nodes[n]["T_heating_return"] = 30 * np.ones(8760) 
-            nodes[n]["V_TES_max"] = 25     # m^3                    
+            nodes[n]["V_TES_max"] = 10     # m^3                    
         
 #        plt.plot(time_steps, nodes[0]["heat"])
 #        plt.plot(time_steps, nodes[1]["cool"])
@@ -189,22 +189,22 @@ def load_params(use_case, path_file, scenario, dem = None):
         
     # conventional district heating and cooling
     if scenario == "conventional_DHC":
-        param["switch_conventional_DHC"] = 1
+        param["switch_bidirectional"] = 0
     else:
-        param["switch_conventional_DHC"] = 0
+        param["switch_bidirectional"] = 1
         
     # Ectogrid with minimum equipment
     if scenario == "Ectogrid_min":
         # Deactivate building devices
         param["use_eh_in_bldgs"] = 0
-        param["use_air_in_bldgs"] = 0
+        param["use_airc_in_bldgs"] = 0
         param["use_tes_in_bldgs"] = 0
         # Deactvate BU devices
         param["feasible_TES"] = 0
         param["feasible_BAT"] = 0
         param["feasible_CTES"] = 0
         param["feasible_EH"] = 0
-        param["feasible_AIR"] = 0
+        param["feasible_AIRC"] = 0
         param["feasible_PV"] = 0
         
     
@@ -213,6 +213,9 @@ def load_params(use_case, path_file, scenario, dem = None):
     
     param["t_air"] = np.loadtxt(open("input_data/weather.csv", "rb"), delimiter = ",",skiprows = 1, usecols=(0))        # °C,    Air temperatur 
     param["G_sol"] = np.loadtxt(open("input_data/weather.csv", "rb"), delimiter = ",",skiprows = 1, usecols=(3))        # W/m^2  Solar radiation  
+    
+    # soil temperature
+    param["t_soil"] = np.loadtxt(open("input_data/soil_temperatures.txt", "rb"), delimiter = ",", usecols=(0))
     
 
     #%% PIPE TEMPERATURES
@@ -223,6 +226,11 @@ def load_params(use_case, path_file, scenario, dem = None):
                           }    
     
     param.update(param_temperatures)
+    
+    # in case of conventional DHC: set cooling network temperatures (they are needed for CC COP calculation)
+    if not param["switch_bidirectional"]:
+        param["T_hot"] = 12 * np.ones(8760)
+        param["T_cold"] = 6 * np.ones(8760)
     
     
     #%% DEEP GROUND TEMPERATURE FOR GEOTHERMAL USE
@@ -308,7 +316,7 @@ def load_params(use_case, path_file, scenario, dem = None):
         for n in nodes:
             for series in ["heat", "cool", "T_heating_supply", "T_heating_return", "T_cooling_supply", "T_cooling_return"]:
                 time_series.append(nodes[n][series])
-        for series in ["t_air", "G_sol", "price_el", "T_hot", "T_cold", "T_soil_deep"]:
+        for series in ["t_air", "t_soil", "G_sol", "price_el", "T_hot", "T_cold", "T_soil_deep"]:
             time_series.append(param[series])
         for series in ["CHP", "PV"]:            
             time_series.append(param["revenue_feed_in"][series])   
@@ -371,13 +379,14 @@ def load_params(use_case, path_file, scenario, dem = None):
             nodes[n]["T_cooling_supply"] = clustered_series[6*n+4]
             nodes[n]["T_cooling_return"] = clustered_series[6*n+5]
         param["t_air"] = clustered_series[6*n_nodes]
-        param["G_sol"] = clustered_series[6*n_nodes+1]
-        param["price_el"] = clustered_series[6*n_nodes+2]
-        param["T_hot"] = clustered_series[6*n_nodes+3]
-        param["T_cold"] = clustered_series[6*n_nodes+4]
-        param["T_soil_deep"] = clustered_series[6*n_nodes+5]     
-        param["revenue_feed_in"]["CHP"] = clustered_series[6*n_nodes+6]
-        param["revenue_feed_in"]["PV"] = clustered_series[6*n_nodes+7]       
+        param["t_soil"] = clustered_series[6*n_nodes+1]
+        param["G_sol"] = clustered_series[6*n_nodes+2]
+        param["price_el"] = clustered_series[6*n_nodes+3]
+        param["T_hot"] = clustered_series[6*n_nodes+4]
+        param["T_cold"] = clustered_series[6*n_nodes+5]
+        param["T_soil_deep"] = clustered_series[6*n_nodes+6]     
+        param["revenue_feed_in"]["CHP"] = clustered_series[6*n_nodes+7]
+        param["revenue_feed_in"]["PV"] = clustered_series[6*n_nodes+8]       
         
                 
 
@@ -429,6 +438,22 @@ def load_params(use_case, path_file, scenario, dem = None):
     param.update(param_pipe_eco)
     
     
+    # network costs and thermal losses
+    if use_case == "FZJ":
+        if scenario in ["Ectogrid_full", "Ectogrid_min"]:
+            param["c_network"] = 27.10
+            param["kA"] = 3.52
+        elif scenario == "conventional_DHC":
+            param["c_network"] = 27.20
+            param["kA"] = 3.52
+        else: # stand alone
+            param["c_network"] = 0
+            param["kA"] = 0
+    else:
+        param["c_network"] = 0
+        param["kA"] = 0        
+    
+    
     #%% PUMP
     param_pump = { "eta_pump": 0.75,
                    "inv_pump": 500,              # EUR/kW
@@ -455,16 +480,19 @@ def load_params(use_case, path_file, scenario, dem = None):
                    }
     
     
-    devs["BOI"]["cap_i"] =  {  0: 0,        # MW_th 
-                               1: 0.5,      # MW_th
-                               2: 5         # MW_th
-                               }
+    if param["switch_cost_functions"]:
+        devs["BOI"]["cap_i"] =  {  0: 0,        # MW_th 
+                                   1: 0.5,      # MW_th
+                                   2: 5         # MW_th
+                                   }
+        
+        devs["BOI"]["inv_i"] = {    0: 0,       # kEUR
+                                    1: 33.75,   # kEUR
+                                    2: 96.2     # kEUR
+                                    }
     
-    devs["BOI"]["inv_i"] = {    0: 0,       # kEUR
-                                1: 33.75,   # kEUR
-                                2: 96.2     # kEUR
-                                }
-    
+    else:
+        devs["BOI"]["inv_var"] = 67.5
 
     #%% COMBINED HEAT AND POWER - INTERNAL COMBUSTION ENGINE POWERED BY NATURAL GAS
     devs["CHP"] = {
@@ -474,18 +502,20 @@ def load_params(use_case, path_file, scenario, dem = None):
                    "cost_om": 0.08,     # ---,           annual operation and maintenance costs as share of investment (VDI 2067)
                    }   
     
-    devs["CHP"]["cap_i"] =  {  0: 0,        # MW_el
-                               1: 0.25,     # MW_el
-                               2: 1,        # MW_el
-                               3: 3         # MW_el
-                               }
-    
-    devs["CHP"]["inv_i"] = {    0: 0,           # kEUR
-                                1: 211.15,      # kEUR
-                                2: 410.7,       # kEUR
-                                3: 707.6        # kEUR
-                                } 
-    
+    if param["switch_cost_functions"]:
+        devs["CHP"]["cap_i"] =  {  0: 0,        # MW_el
+                                   1: 0.25,     # MW_el
+                                   2: 1,        # MW_el
+                                   3: 3         # MW_el
+                                   }
+        
+        devs["CHP"]["inv_i"] = {    0: 0,           # kEUR
+                                    1: 211.15,      # kEUR
+                                    2: 410.7,       # kEUR
+                                    3: 707.6        # kEUR
+                                    } 
+    else:
+        devs["CHP"]["inv_var"] = 750
 
     
     #%% ABSORPTION CHILLER
@@ -495,16 +525,19 @@ def load_params(use_case, path_file, scenario, dem = None):
                   "cost_om": 0.03,      # ---,        annual operation and maintenance costs as share of investment (VDI 2067)
                   }
     
-    devs["AC"]["cap_i"] =   {  0: 0,        # MW_th
-                               1: 0.25,     # MW_th
-                               2: 3,        # MW_th
-
-                               }
+    if param["switch_cost_functions"]:   
+        devs["AC"]["cap_i"] =   {  0: 0,        # MW_th
+                                   1: 0.25,     # MW_th
+                                   2: 3,        # MW_th
     
-    devs["AC"]["inv_i"] = {     0: 0,           # kEUR
-                                1: 131.3,       # kEUR
-                                2: 763.2        # kEUR
-                                } 
+                                   }
+        
+        devs["AC"]["inv_i"] = {     0: 0,           # kEUR
+                                    1: 131.3,       # kEUR
+                                    2: 763.2        # kEUR
+                                    } 
+    else:
+         devs["AC"]["inv_var"] = 525
 
 
     
@@ -537,17 +570,20 @@ def load_params(use_case, path_file, scenario, dem = None):
     devs["HP"]["COP"] = calc_COP(devs, param, "HP", [t_c_in, dt_c, t_h_in, dt_h])
     
     # Piece-wise linear cost function including borehole-costs
-    devs["HP"]["cap_i"] =   {  0: 0,        # MW_th
-                               1: 0.2,      # MW_th
-                               2: 0.5,      # MW_th
-                               3: 2         # MW_th
-                               }
-    
-    devs["HP"]["inv_i"] = {     0: 0,           # kEUR
-                                1: 388.57,      # kEUR
-                                2: 921.43,      # kEUR
-                                3: 3385.72      # kEUR
-                                } 
+    if param["switch_cost_functions"]:
+        devs["HP"]["cap_i"] =   {  0: 0,        # MW_th
+                                   1: 0.2,      # MW_th
+                                   2: 0.5,      # MW_th
+                                   3: 2         # MW_th
+                                   }
+        
+        devs["HP"]["inv_i"] = {     0: 0,           # kEUR
+                                    1: 388.57,      # kEUR
+                                    2: 921.43,      # kEUR
+                                    3: 3385.72      # kEUR
+                                    } 
+    else:
+        devs["HP"]["inv_var"] = 1000
 
 
     #%% COMPRESSION CHILLER
@@ -570,19 +606,23 @@ def load_params(use_case, path_file, scenario, dem = None):
     t_h_in = param["t_air"] + devs["CC"]["dT_min_cooler"] + 273.15       # heat sink inlet temperature (equals temperature of cold cooling water)
     dt_h = devs["CC"]["dT_cond"]                                # cooling water temperature difference
     
+    
     devs["CC"]["COP"] = calc_COP(devs, param, "CC", [t_c_in, dt_c, t_h_in, dt_h])
     
     
-    devs["CC"]["cap_i"] = { 0: 0,       # MW_th
-                            1: 0.5,     # MW_th
-                            2: 4        # MW_th
-                            }
-    
-    
-    devs["CC"]["inv_i"] = { 0: 0,      # kEUR
-                            1: 111,     # kEUR
-                            2: 632.2     # kEUR
-                            } 
+    if param["switch_cost_functions"]:
+        devs["CC"]["cap_i"] = { 0: 0,       # MW_th
+                                1: 0.5,     # MW_th
+                                2: 4        # MW_th
+                                }
+        
+        
+        devs["CC"]["inv_i"] = { 0: 0,      # kEUR
+                                1: 111,     # kEUR
+                                2: 632.2     # kEUR
+                                } 
+    else:
+        devs["CC"]["inv_var"] = 170
 
     #%% AIR COOLER 
     devs["AIRC"] = {
@@ -612,25 +652,13 @@ def load_params(use_case, path_file, scenario, dem = None):
                        "max_dch": 0.25,     # 1/h,              maximum soc change per hour by discharging
                        "min_soc": 0,
                        "max_soc": 1,
-                       "sto_loss": 0.005,    # 1/h,              standby losses over one time step
-                       "eta_ch": 0.95,       # ---,              charging efficiency
-                       "eta_dch": 0.95,      # ---,              discharging efficiency
+                       "sto_loss": 0.005,    # 1/h,             standby losses over one time step
+                       "eta_ch": 0.95,       # ---,             charging efficiency
+                       "eta_dch": 0.95,      # ---,             discharging efficiency
                        "life_time": 20,     # a,                operation time (VDI 2067 Trinkwasserspeicher)
                        "cost_om": 0.02,     # ---,              annual operation and maintenance costs as share of investment (VDI 2067 Trinkwasserspeicher)
                        "dT_min": 2,
                        }
-        
-        
-        devs[device]["V_i"] = { 0: 0,           # m^3
-                                1: 200,         # m^3
-                                2: 1000,        # m^3
-                                }
-        
-
-        devs[device]["inv_i"] = {   0: 0,               # kEUR
-                                    1: 128.24,          # kEUR,    
-                                    2: 357,             # kEUR       
-                                    }
 
         
     # Storage temperatures
@@ -639,17 +667,32 @@ def load_params(use_case, path_file, scenario, dem = None):
     devs["CTES"]["T_min"] = 2 
     devs["CTES"]["T_max"] = np.min(param["T_cold"]) - devs["CTES"]["dT_min"]      
                                                         
-    
-    
-    
-    for device in ["TES", "CTES"]: 
         
-        devs[device]["cap_i"] = {}
-        for i in range(len(devs[device]["V_i"])):
-            devs[device]["cap_i"][i] = param["rho_f"] * devs[device]["V_i"][i] * param["c_f"] * (devs[device]["T_max"] - devs[device]["T_min"]) / (1e6 * 3600)
-        devs[device]["max_cap"] = devs[device]["cap_i"][len(devs[device]["cap_i"])-1]
-        
-
+    if param["switch_cost_functions"]:
+        for device in ["TES", "CTES"]: 
+    
+            devs[device]["V_i"] = { 0: 0,           # m^3
+                                    1: 200,         # m^3
+                                    2: 1000,        # m^3
+                                    }
+            
+    
+            devs[device]["inv_i"] = {   0: 0,               # kEUR
+                                        1: 128.24,          # kEUR,    
+                                        2: 357,             # kEUR       
+                                        }
+            
+            devs[device]["cap_i"] = {}
+            for i in range(len(devs[device]["V_i"])):
+                devs[device]["cap_i"][i] = param["rho_f"] * devs[device]["V_i"][i] * param["c_f"] * (devs[device]["T_max"] - devs[device]["T_min"]) / (1e6 * 3600)
+            devs[device]["max_cap"] = devs[device]["cap_i"][len(devs[device]["cap_i"])-1]
+     
+    else:
+        for device in ["TES", "CTES"]:
+            devs[device]["inv_vol"] = 640      # EUR/m^3
+            devs[device]["V_max"] = 200
+            devs[device]["inv_var"] = devs[device]["inv_vol"] / (param["rho_f"] * param["c_f"] * (devs[device]["T_max"] - devs[device]["T_min"])) * 1000 * 3600      # kEUR/MWh
+            devs[device]["max_cap"] = devs[device]["V_max"] * param["rho_f"] * param["c_f"] * (devs[device]["T_max"] - devs[device]["T_min"]) /(1e6 * 3600)
 
       
     #%% BATTERY STORAGE
@@ -716,21 +759,21 @@ def load_params(use_case, path_file, scenario, dem = None):
                             "cost_om": 0.025,      # ---,      annual operation and maintenance as share of investment (VDI 2067)
                             "COP_max": 7,          # ---,      maximum heat pump COP
                             # For stand-alone supply only:
-                            "dT_pinch_air": 8,      # K,        additional pinch point temperature difference in case of air-source heat pump
-                            "dT_air": 10            # K,        temperature decrease of air in case of air in HP evaporator  
+                            "dT_pinch_air": 10,      # K,       pinch point temperature difference in case of air-source heat pump
+                            "dT_air": 18            # K,        temperature decrease of air in case of air in HP evaporator  
                             }
         
         
     
     devs_dom["CC"] = {
                            "life_time": 15,       # a,      operation time (VDI 2067)
-                           "inv_var": 157,        # EUR/kW, domestic compression chiller investment costs
+                           "inv_var": 160,        # EUR/kW, domestic compression chiller investment costs
                            "inv_fix": 0,          # EUR
                            "cost_om": 0.035,      #---,     annual operation and maintenance as share of investment (VDI 2067)
                            "COP_max": 6,          # ---,    maximum compression chiller COP
                            # For stand-alone supply only:
-                           "dT_min_cooler": 10,   # K,      minimum temperature difference between cooling water and air ( in case of stand-alone supply)
-                           "dT_cooler": 5         # K,      temperature increase of cooling water in CC condenser
+                           "dT_min_cooler": 10,    # K,      minimum temperature difference between CC fluid and air
+                           "dT_cooler": 20         # K,      temperature increase of air in CC condenser
                             }
     
     
@@ -763,11 +806,11 @@ def load_params(use_case, path_file, scenario, dem = None):
     devs_dom["TES"] =      {
                            "T_max": 90,         # °C,               maximum storage temperature     
                            "T_min": 62,         # °C,               minimal storage temperature      
-                           "sto_loss": 0.005,       # 1/h,              standby losses over one time step
-                           "eta_ch": 0.95,         # ---,              charging efficiency
-                           "eta_dch": 0.95,        # ---,              discharging efficiency
+                           "sto_loss": 0.005,       # 1/h,          standby losses over one time step
+                           "eta_ch": 0.95,         # ---,           charging efficiency
+                           "eta_dch": 0.95,        # ---,           discharging efficiency
                            "life_time": 20,     # a,                operation time (VDI 2067 Trinkwasserspeicher)
-                           "inv_vol": 641.2,    # EUR/m^3           investment costs per m^3 storage volume
+                           "inv_vol": 640,    # EUR/m^3           investment costs per m^3 storage volume
                            "inv_fix": 0,        # EUR
                            "cost_om": 0.02,     # ---,              annual operation and maintenance costs as share of investment (VDI 2067 Trinkwasserspeicher)
                            }

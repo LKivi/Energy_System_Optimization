@@ -15,6 +15,7 @@ import datetime
 import time
 import numpy as np
 import json
+import soil
 
 
 
@@ -417,7 +418,7 @@ def run_optim(nodes, param, dir_results):
         
     # available inner pipe diameters for the network    
     path = "input_data/pipes_diameters.txt"
-    diameters = np.loadtxt(open(path, "rb"), delimiter = ",", usecols=(0)) - 2*np.loadtxt(open(path, "rb"), delimiter = ",", usecols=(1))      # inner diameters = outer diameters - 2 * wall thickness
+    diameters = np.loadtxt(open(path, "rb"), delimiter = ",", usecols=(0)) - 2 * np.loadtxt(open(path, "rb"), delimiter = ",", usecols=(1))      # inner diameters = outer diameters - 2 * wall thickness
     
     for p in pipes:
         d_opt = diam[p].X
@@ -439,7 +440,7 @@ def run_optim(nodes, param, dir_results):
                 d_norm = d_0
             else:
                 d_norm = d_1
-        pipes_norm[p] = {"diameter": d_norm,                 # m,   norm diameter
+        pipes_norm[p] = {"diameter": np.round(d_norm,5),                 # m,   norm diameter
                         "length": edge_lengths[p]
                         }
     
@@ -485,11 +486,12 @@ def run_optim(nodes, param, dir_results):
         
     # Store annualized network costs 
     param["tac_network"] = tac_network_norm
+    print(param["tac_network"])
         
     # Calculate thermal losses and write them into parameters
-#    losses = soil_clustered.calculate_thermal_losses(param, pipes_norm)
-#    param["heat_losses"] = losses["heat"]
-#    param["cool_losses"] = losses["cool"]
+    losses = soil.calculate_thermal_losses(param, pipes_norm)
+    param["heat_losses"] = losses["heat"]
+    param["cool_losses"] = losses["cool"]
     
 
 

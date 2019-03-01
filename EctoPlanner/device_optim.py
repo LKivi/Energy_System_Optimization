@@ -18,19 +18,21 @@ import device_optim_ectogrid_clustered as opt_ecto_clustered
 def run(nodes, param, devs, devs_dom, dir_results):
     
 
-    if param["switch_conventional_DHC"]:
+    if param["switch_bidirectional"]:
 
+        if param["switch_clustering"]:
+            nodes, param = opt_ecto_clustered.run_optim(nodes, param, devs, devs_dom, dir_results)
+        else:
+            nodes, param = opt_ecto.run_optim(nodes, param, devs, devs_dom, dir_results)        
+
+    else:
+        
         if param["switch_clustering"]:        
             nodes, param = opt_conv_clustered.run_optim("tac", "", "", nodes, param, devs, devs_dom, dir_results)
         else:
             nodes, param = opt_conv.run_optim("tac", "", "", nodes, param, devs, devs_dom, dir_results)
-
-    else:
         
-        if param["switch_clustering"]:
-            nodes, param = opt_ecto_clustered.run_optim(nodes, param, devs, devs_dom, dir_results)
-        else:
-            nodes, param = opt_ecto.run_optim(nodes, param, devs, devs_dom, dir_results)
+
             
             
     

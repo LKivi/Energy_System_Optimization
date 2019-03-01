@@ -18,23 +18,26 @@ def calculate_thermal_losses(param, pipe_data):
     
     
 #    T_soil = calculate_soil_temperature(param)
-    T_soil = np.loadtxt(open("input_data/soil_temperatures.txt", "rb"), delimiter = ",", usecols=(0))
+    T_soil = np.array(param["t_soil"])
     
     losses = {}
-    losses["heat"] = np.zeros(8760)
-    losses["cool"] = np.zeros(8760)
+    losses["heat"] = np.zeros((param["n_clusters"], 24))
+    losses["cool"] = np.zeros((param["n_clusters"], 24))      
     
     path = "input_data/pipes_diameters.txt"
-    # available inner pipe diameters for the cooling network
-    diameters = np.loadtxt(open(path, "rb"), delimiter = ",", usecols=(0))
-    # available pipe wall thicknesses for the cooling network
+    # available inner pipe diameters
+    diameters = np.loadtxt(open(path, "rb"), delimiter = ",", usecols=(0)) - 2 * np.loadtxt(open(path, "rb"), delimiter = ",", usecols=(1))
+    # available pipe wall thicknesses
     t_PE = np.loadtxt(open(path, "rb"), delimiter = ",", usecols=(1))
     
     # create dictionary for pipe geometry
     pipe_geo = {}
     for i in range(np.size(diameters)):
-        pipe_geo[diameters[i]] = {"t_PE": t_PE[i]
-                               }
+        pipe_geo[np.round(diameters[i],5)] = {"t_PE": t_PE[i]
+                                             }
+    # get pipe temperatures
+    T_hot = param["T_hot"]
+    T_cold = param["T_cold"]
     
     for p in pipe_data:
         d = pipe_data[p]["diameter"]
@@ -46,8 +49,8 @@ def calculate_thermal_losses(param, pipe_data):
                  d/2 * 1/param["lambda_PE"] * np.log((d+2*t)/d) +                                                                              # thermal resistance PE pipe
                  d/2 * 1/param["lambda_soil"] * np.log((4*(param["grid_depth"] + param["R_0"]*param["lambda_soil"]))/(d+2*t))) ** (-1)         # thermal resistance soil
                 
-        losses["heat"] = losses["heat"] + k*np.pi*d*L*(param["T_hot"] - T_soil) / 1e6
-        losses["cool"] = losses["cool"] + k*np.pi*d*L*(T_soil - param["T_cold"]) / 1e6 
+        losses["heat"] = losses["heat"] + k*np.pi*d*L*(T_hot - T_soil) / 1e6
+        losses["cool"] = losses["cool"] + k*np.pi*d*L*(T_soil - T_cold) / 1e6 
         
 
     return losses

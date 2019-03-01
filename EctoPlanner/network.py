@@ -11,9 +11,11 @@ import network_optim_clustered
 
 def design_network(nodes, param, dir_results):
     
-    if param["switch_clustered"]:
+    if param["switch_clustering"]:
         param = network_optim_clustered.run_optim(nodes, param, dir_results)
     else:
         param = network_optim.run_optim(nodes, param, dir_results)
+        
+    return param
         
         

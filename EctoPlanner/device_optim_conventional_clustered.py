@@ -27,6 +27,7 @@ def run_optim(obj_fn, obj_eps, eps_constr, nodes, param, devs, devs_dom, dir_res
           
     days = range(param["n_clusters"])
     time_steps = range(24)
+    year = range(365)
     
     # Sum up building heat demands
     dem = {}
@@ -35,20 +36,12 @@ def run_optim(obj_fn, obj_eps, eps_constr, nodes, param, devs, devs_dom, dir_res
         
 
     # Create set for devices
-    all_devs = ["BOI", "CHP", "AC", "CC", "SUB"]         # SUB = building substations ( = heat exchangers)
+    all_devs = ["BOI", "CHP", "AC", "CC", "SUB"]         # note: building substations are modeled as free coolers
     
-    
-    # Get constant investment costs (kEUR / MW)
-    inv_var = {}
-    inv_var["BOI"] = 67.5
-    inv_var["CHP"] = 768
-    inv_var["AC"] = 525
-    inv_var["CC"] = 166  
     
     
     # Substation (= heat exchangers) parameters equal free-cooler parameters
     devs["SUB"] = devs_dom["FRC"]
-    inv_var["SUB"] = devs["SUB"]["inv_var"]
     devs["SUB"]["ann_factor"] = devs["SUB"]["ann_inv_var"] / devs["SUB"]["inv_var"]
          
     #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -60,6 +53,7 @@ def run_optim(obj_fn, obj_eps, eps_constr, nodes, param, devs, devs_dom, dir_res
     #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     # Create new variables
 
+    # all variables that are used in post-processing are introduced, even if not needed in this model
     
     # Piece-wise linear function variables
     lin = {}
@@ -70,7 +64,7 @@ def run_optim(obj_fn, obj_eps, eps_constr, nodes, param, devs, devs_dom, dir_res
             
     # Device's capacity (i.e. nominal power)
     cap = {}
-    for device in ["BOI", "CHP", "AC", "CC", "SUB"]:
+    for device in ["SUB", "BOI", "CHP", "AC", "CC", "TES", "CTES", "AIRC", "HP", "EH", "BAT", "PV"]:
         cap[device] = model.addVar(vtype="C", name="nominal_capacity_" + str(device))
     
     # Gas flow to/from devices
@@ -84,7 +78,7 @@ def run_optim(obj_fn, obj_eps, eps_constr, nodes, param, devs, devs_dom, dir_res
         
     # Eletrical power to/from devices
     power = {}
-    for device in ["CHP", "CC", "HP", "from_grid", "to_grid"]:
+    for device in ["CHP", "CC", "from_grid", "to_grid", "HP", "EH", "PV"]:
         power[device] = {}
         for d in days:
             power[device][d] = {}
@@ -93,7 +87,7 @@ def run_optim(obj_fn, obj_eps, eps_constr, nodes, param, devs, devs_dom, dir_res
        
     # Heat to/from devices
     heat = {}
-    for device in ["BOI", "CHP", "AC"]:
+    for device in ["BOI", "CHP", "AC", "HP", "EH"]:
         heat[device] = {}
         for d in days:
             heat[device][d] = {}
@@ -102,13 +96,45 @@ def run_optim(obj_fn, obj_eps, eps_constr, nodes, param, devs, devs_dom, dir_res
     
     # Cooling power to/from devices
     cool = {}
-    for device in ["CC", "AC"]:
+    for device in ["CC", "AC", "AIRC"]:
         cool[device] = {}
         for d in days:
             cool[device][d] = {}
             for t in time_steps:
                 cool[device][d][t] = model.addVar(vtype="C", name="cool_" + device + "_d" + str(d) + "_t" + str(t))
-            
+
+
+    # Storage variables
+    
+    # initial state of charge which has to be followed at the beginning (and end) of every type-day
+#    soc_init = {}
+#    for device in ["TES", "CTES", "BAT"]:
+#        soc_init[device] = model.addVar(vtype="C", name="initial_soc_" + device)
+      
+    ch = {}  # Energy flow to charge storage device
+    dch = {} # Energy flow to discharge storage device
+    soc = {} # State of charge
+
+    for device in ["TES", "CTES", "BAT"]:
+        ch[device] = {}
+        dch[device] = {}
+        soc[device] = {}
+        for d in days:
+            ch[device][d] = {}
+            for t in time_steps:
+                ch[device][d][t] = model.addVar(vtype="C", name="ch_" + device + "_d" + str(d) + "_t" + str(t))
+        for d in days:
+            dch[device][d] = {}
+            for t in time_steps:
+                dch[device][d][t] = model.addVar(vtype="C", name="dch_" + device + "_d" + str(d) + "_t" + str(t))
+        for day in year:
+            soc[device][day] = {}
+            for t in time_steps:
+                soc[device][day][t] = model.addVar(vtype="C", name="soc_" + device + "_d" + str(day) + "_t" + str(t))
+#        soc[device][len(year)-1][len(time_steps)] = model.addVar(vtype="C", name="soc_" + device + "_" + str(len(year)-1) + "_t" + str(len(time_steps)))
+              
+        
+    
     inv = {}
     c_inv = {}
     c_om = {}
@@ -119,9 +145,8 @@ def run_optim(obj_fn, obj_eps, eps_constr, nodes, param, devs, devs_dom, dir_res
         c_inv[device] = model.addVar(vtype = "C", name="annual_investment_costs_" + device)
     for device in all_devs:
         c_om[device] = model.addVar(vtype = "C", name="om_costs_" + device)
-    for device in all_devs:
-        c_total[device] = model.addVar(vtype = "C", name="total_annual_costs_" + device)        
-    
+    for device in ["SUB", "BOI", "CHP", "AC", "CC", "TES", "CTES", "AIRC", "HP", "EH", "BAT", "PV"]:
+        c_total[device] = model.addVar(vtype = "C", name="total_annual_costs_" + device)            
 
   
     # grid maximum transmission power
@@ -134,16 +159,17 @@ def run_optim(obj_fn, obj_eps, eps_constr, nodes, param, devs, devs_dom, dir_res
     gas_total = model.addVar(vtype = "C", name="gas_total")
     
     # total revenue for feed-in
-    revenue_feed_in = model.addVar(vtype="C", name="revenue_feed_in_CHP")
+    revenue_feed_in = {}
+    for device in ["CHP", "PV"]:
+        revenue_feed_in[device] = model.addVar(vtype="C", name="revenue_feed_in_"+str(device))
     # Electricity costs
     electricity_costs = model.addVar(vtype = "C", name="electricity_costs")    
     
     #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     # Objective functions
     obj = {}
-    set_obj = ["tac", "co2_gross"] # Mögliche Zielgrößen
-    for k in set_obj:
-        obj[k] = model.addVar(vtype="C", lb=-gp.GRB.INFINITY, name="obj_" + k)    
+    obj["tac"] = model.addVar(vtype="C", lb=-gp.GRB.INFINITY, name="total_annualized_costs") 
+    obj["co2_gross"] = model.addVar(vtype="C", lb=-gp.GRB.INFINITY, name="total_gross_CO2") 
       
     #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     # Define objective function
@@ -259,8 +285,8 @@ def run_optim(obj_fn, obj_eps, eps_constr, nodes, param, devs, devs_dom, dir_res
 
     model.addConstr(electricity_costs == sum(sum((power["from_grid"][d][t] * param["price_el"][d][t]) for t in time_steps) * param["day_weights"][d] for d in days))
     
-    model.addConstr(revenue_feed_in == sum(sum((power["to_grid"][d][t] * param["revenue_feed_in"]["CHP"][d][t]) for t in time_steps) * param["day_weights"][d] for d in days))
-    
+    model.addConstr(revenue_feed_in["CHP"] == sum(sum((power["to_grid"][d][t] * param["revenue_feed_in"]["CHP"][d][t]) for t in time_steps) * param["day_weights"][d] for d in days))
+    model.addConstr(revenue_feed_in["PV"] == 0)
     
     
     # total investment costs
@@ -268,10 +294,10 @@ def run_optim(obj_fn, obj_eps, eps_constr, nodes, param, devs, devs_dom, dir_res
         for device in ["BOI", "CHP", "CC", "AC"]:
             model.addConstr( inv[device] == sum(lin[device][i] * devs[device]["inv_i"][i] for i in range(len(devs[device]["cap_i"]))) )
         for device in ["SUB"]:
-            model.addConstr(inv[device] == inv_var[device] * cap[device])
+            model.addConstr(inv[device] == devs[device]["inv_var"] * cap[device])
     else:
         for device in all_devs:
-            model.addConstr(inv[device] == inv_var[device] * cap[device])        
+            model.addConstr(inv[device] == devs[device]["inv_var"] * cap[device])        
         
     # Annual investment costs
     for device in all_devs:
@@ -291,10 +317,11 @@ def run_optim(obj_fn, obj_eps, eps_constr, nodes, param, devs, devs_dom, dir_res
 
     #%% OBJECTIVE FUNCTIONS
     # TOTAL ANNUALIZED COSTS
-    model.addConstr(obj["tac"] == sum(c_total[dev] for dev in all_devs)                                           # annualized investment costs              
+    model.addConstr(obj["tac"] == sum(c_total[dev] for dev in all_devs)                                           # annualized device investment costs   
+                                  + param["c_network"]                                                            # annualized network costs           
                                   + gas_total * param["price_gas"] + grid_limit_gas * param["price_cap_gas"]      # gas costs
                                   + electricity_costs + grid_limit_el * param["price_cap_el"]                     # electricity costs
-                                  - revenue_feed_in   	                                                          # revenue for grid feed-in
+                                  - revenue_feed_in["CHP"]   	                                                  # revenue for grid feed-in
                                   , "sum_up_TAC")                                    
     
     # ANNUAL CO2 EMISSIONS: Implicit emissions by power supply from national grid is penalized, feed-in is ignored
@@ -348,12 +375,13 @@ def run_optim(obj_fn, obj_eps, eps_constr, nodes, param, devs, devs_dom, dir_res
         
 
         # Store param and nodes as json
-
+        
         # param
         for item in ["G_sol", "T_cold", "T_hot", "T_soil_deep", "day_matrix", "day_weights", "price_el", "sigma", "t_air"]:
             param[item] = param[item].tolist()
         for item in ["CHP", "PV"]:
             param["revenue_feed_in"][item] = param["revenue_feed_in"][item].tolist()                
+        param["gas_buildings"] = [0]
         with open(dir_results + "\parameter.json", "w") as outfile:
             json.dump(param, outfile, indent=4, sort_keys=True)    
         
@@ -361,13 +389,20 @@ def run_optim(obj_fn, obj_eps, eps_constr, nodes, param, devs, devs_dom, dir_res
         for item in ["T_cooling_return", "T_cooling_supply", "T_heating_return", "T_heating_supply", "cool", "heat"]:
             for n in nodes:
                 nodes[n][item] = nodes[n][item].tolist()
+        for item in ["mass_flow", "power_dem", "res_heat_dem"]:
+            for n in nodes:
+                nodes[n][item] = [0]                
         with open(dir_results + "\data_nodes.json", "w") as outfile:
             json.dump(nodes, outfile, indent=4, sort_keys=True)         
+        
+        
+        # add keys which are retrieved in post-processing
+
 
 
         # Run Post Processing
-#        if param["switch_post_processing"]:
-#            post.run(dir_results)
+        if param["switch_post_processing"]:
+            post.run(dir_results)
     
         
         # Print real investment costs per MW
