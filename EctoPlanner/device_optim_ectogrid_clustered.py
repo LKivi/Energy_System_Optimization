@@ -559,7 +559,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
                      # Priorize free cooler by limitation of air cooler
                      model.addConstr(cool_dom["AIRC"][n][d][t] <= nodes[n]["cool"][d][t] * (nodes[n]["T_cooling_return"][d][t] - (param["T_hot"][d][t] + devs_dom["FRC"]["dT_min"]))/(nodes[n]["T_cooling_return"][d][t] - nodes[n]["T_cooling_supply"][d][t]))
                      # sum of free cooler and air cooler
-                     model.addConstr( cool_dom["AIRC"][n][d][t] + cool_dom["FRC"][n][d][t] <=  nodes[n]["cool"][d][t] * (nodes[n]["T_cooling_return"][d][t] - (param["T_cold"][d][t] + devs_dom["FRC"]["dT_min"]))/(nodes[n]["T_cooling_return"][d][t] - nodes[n]["T_cooling_supply"][d][t]))
+                     model.addConstr(cool_dom["FRC"][n][d][t] <=  nodes[n]["cool"][d][t] * (nodes[n]["T_cooling_return"][d][t] - (param["T_cold"][d][t] + devs_dom["FRC"]["dT_min"]))/(nodes[n]["T_cooling_return"][d][t] - nodes[n]["T_cooling_supply"][d][t]) - cool_dom["AIRC"][n][d][t])
                 
                 
     #%% RESIDUAL THERMAL LOADS
@@ -625,7 +625,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
             model.addConstr( inv_dom[device][n] == devs_dom[device]["inv_var"] * cap_dom[device][n] )
         
             # annualized investment
-            model.addConstr( c_inv_dom[device][n] == devs_dom[device]["ann_inv_var"] * cap_dom[device][n] )
+            model.addConstr( c_inv_dom[device][n] == devs_dom[device]["ann_factor"] * inv_dom[device][n] )
     
             # Operation and maintenance costs 
             model.addConstr( c_om_dom[device][n] == devs_dom[device]["cost_om"] * inv_dom[device][n] )
@@ -743,7 +743,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
                 model.addConstr(cool["AIRC"][d][t] == 0)
             else:
                 if param["switch_single_balance"]:
-                    model.addConstr( cool["AIRC"][d][t] <= ( -residual["thermal"][d][t] + heat["BOI"][d][t] + heat["CHP"][d][t] + heat["HP"][d][t] + heat["EH"][d][t] + dch["TES"][d][t]) * (param["T_hot"][d][t] - (t_air[d][t] + devs["AIRC"]["dT_min"]))/ (param["T_hot"][d][t] - param["T_cold"][d][t] ))
+                    model.addConstr( cool["AIRC"][d][t] <= ( -residual["thermal"][d][t] + heat["BOI"][d][t] + heat["CHP"][d][t] + heat["HP"][d][t] + heat["EH"][d][t] + dch["TES"][d][t] - heat["AC"][d][t] - ch["TES"][d][t]) * (param["T_hot"][d][t] - (t_air[d][t] + devs["AIRC"]["dT_min"]))/ (param["T_hot"][d][t] - param["T_cold"][d][t] ))
                 else:
                     model.addConstr( cool["AIRC"][d][t] <=  residual["cool"][d][t] * (param["T_hot"][d][t] - (t_air[d][t] + devs["AIRC"]["dT_min"]))/ (param["T_hot"][d][t] - param["T_cold"][d][t] ))
             
@@ -912,8 +912,8 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
                     model.addConstr( ch[dev][d][t] == 0 )
                     model.addConstr( dch[dev][d][t] == 0 )
                     
-        # deactivate all building devices except for EH, HP, CC
-        for dev in ["BOI", "FRC", "AIRC", "TES"]:
+        # deactivate BOI and FRC in buildings
+        for dev in ["BOI", "FRC"]:
             for n in nodes:
                 model.addConstr( cap_dom[dev][n] == 0)
         for dev in ["TES"]:
@@ -932,7 +932,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
     model.addConstr(from_grid_total == sum(sum(power["from_grid"][d][t] for t in time_steps) * param["day_weights"][d] for d in days))
     model.addConstr(to_grid_total == sum(sum(power["to_grid"][d][t] for t in time_steps) * param["day_weights"][d] for d in days))
     
-    model.addConstr(electricity_costs == sum(sum((power["from_grid"][d][t] * param["price_el"][d][t]) for t in time_steps) * param["day_weights"][d] for d in days))
+    model.addConstr(electricity_costs == sum(sum((power["from_grid"][d][t] * param["price_el"][d][t] * param["day_weights"][d]) for t in time_steps) for d in days))
     
     for device in ["PV", "CHP"]:
         model.addConstr(revenue_feed_in[device] == sum(sum((feed_in[device][d][t] * param["revenue_feed_in"][device][d][t]) for t in time_steps) * param["day_weights"][d] for d in days))
@@ -968,7 +968,7 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
     
     model.addConstr(tac_total ==      sum(c_total[dev] for dev in all_devs)                                              # annual investment costs + o&m costs for BU devices
                                     + sum(sum(c_total_dom[dev][n] for n in nodes) for dev in all_devs_dom)                # annual investment costs + o&m costs for building devices
-                                    + param["c_network"]                                                                  # annualized pipe costs
+                                    + param["c_network"]
                                     + gas_total * param["price_gas"] + grid_limit_gas * param["price_cap_gas"]            # gas costs
                                     + electricity_costs + grid_limit_el * param["price_cap_el"]                           # electricity purchase costs + capacity price for grid usage
                                     - sum(revenue_feed_in[dev] for dev in ["CHP", "PV"])                                  # feed-in revenue
@@ -1089,28 +1089,9 @@ def run_optim(nodes, param, devs, devs_dom, dir_results):
         # Run Post Processing
         if param["switch_post_processing"]:
             post.run(dir_results)
-    
-        
-#        # Print real investment costs per MW
-#        # ( To Check if input costs (line 48 ff.) are reasonable )
-#        for device in ["BOI", "CHP", "AC", "CC", "TES", "CTES", "HP"]:
-#            if cap[device].X > 0:
-#                # Calculate investment costs according to piece-wise linear funcitons
-#                for i in range(len(devs[device]["cap_i"])):
-#                    if devs[device]["cap_i"][i] >= cap[device].X:
-#                        # Get supporting points for linear interpolation
-#                        cap_top = devs[device]["cap_i"][i]
-#                        cap_bot = devs[device]["cap_i"][i-1]
-#                        inv_top = devs[device]["inv_i"][i]
-#                        inv_bot = devs[device]["inv_i"][i-1]
-#                        break
-#                # Calculate real variable investment
-#                inv_var_real = (inv_bot + (cap[device].X - cap_bot) / (cap_top - cap_bot) * (inv_top - inv_bot)) / cap[device].X                       
-#                print(device + ": " + str(round(inv_var_real,2)))
                 
         
     
-        # return nodes, param
         return nodes, param
         
 #        return tac_total.X

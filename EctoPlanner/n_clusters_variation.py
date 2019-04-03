@@ -6,7 +6,7 @@ Created on Wed Feb 13
 """
 
 import parameters
-import bldg_balancing_optim_complete_clustered as opt
+import device_optim_ectogrid_clustered as opt
 import datetime
 import os
 import numpy as np
@@ -14,10 +14,13 @@ import numpy as np
 
 use_case = "FZJ"
 
+
+scenario = "Ectogrid_min"
+
 # Choose scenario
 #scenario = "typedays_1bal"                              # Typedays, single thermal balance for BU design, TES in buildings
 #scenario = "typedays_absC"                              # Clustering, seperated heating and cooling balance for BU design, TES in buildings
-scenario = "typedays_1bal_noBldgTES"                    # Clustering, single thermal balance for BU design, no building storages
+#scenario = "typedays_1bal_noBldgTES"                    # Clustering, single thermal balance for BU design, no building storages
 #scenario = "typedays_absC_noBldgTES"                    # Clustering, seperated heating and cooling balance for BU design, no building storages
 #scenario = "typedays_standalone"
 #scenario = "1bal_noBldgTES"

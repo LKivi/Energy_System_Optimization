@@ -408,45 +408,90 @@ def transform_coordinates(nodes):
 #%%
 def design_pump(data, param, dem_buildings):
     
-    graph = get_graph(data)
-    
-    # get supply unit
-    for n in data["nodes"]:
-        if data["nodes"][n]["type"] == "supply":
-            supply_node = int(n) 
-    
-    # get path lengths to buildings
-    dict_lengths = {}
-    for n in data["nodes"]:
-        if data["nodes"][n]["type"] == "building":
-           path = nx.shortest_path(graph, source = supply_node, target = int(n))
-           path_length = 0
-           for k in range(len(path)-1):
-               path_length += np.sqrt((data["nodes"][path[k+1]]["x"]-data["nodes"][path[k]]["x"])**2 + (data["nodes"][path[k+1]]["y"]-data["nodes"][path[k]]["y"])**2)
-           dict_lengths[data["nodes"][n]["name"]] = path_length
-           
-    # Calculate pressure loss on every path at maximum load and find the path with maximum pressure loss and calculate pump capacities
-    pump_caps = {}
-    # Size pump for heating and cooling grid
-    for typ in ["heating", "cooling"]:
-        pressure_losses = []
-        for destination in dict_lengths:
-            max_dem = np.max(dem_buildings[typ][destination])
-            dp = (max_dem > 0) * ((2*param["dp_pipe"]*dict_lengths[destination])/(1 - param["dp_single"]) +        # pressure loss in pipes
-                          max_dem * param["dp_substation"])                                                        # pressure drop in substation
-            pressure_losses.append(dp)
-        dp_max = max(pressure_losses)
-      
-        # find edge at supply unit to get total mass flow through pump
+    pump_energy = {}
+    for demand in ["heat", "cool"]:
+        pump_energy[demand] = {}
         for e in data["edges"]:
-            n1 = data["edges"][e]["node_ids"][0]
-            n2 = data["edges"][e]["node_ids"][1]
-            if data["nodes"][n1]["name"] == "supply" or data["nodes"][n2]["name"] == "supply":
-                m_flow_pump = data["edges"][e]["max_flow_"+typ]
+            pump_energy[demand][e] = np.zeros(8760)
     
-        cap = m_flow_pump/(param["eta_pump"]*param["rho_f"])*dp_max / 1e6             # MW,   electrical power of pump
-        pump_caps[typ] = cap
-        param["pump_cap_"+typ] = cap
+    # pre-factor for pump power calculation
+    prefac = (8 * param["f_fric"])/(param["rho_f"]**2*np.pi**2*param["eta_pump"])/1e6 
+    
+    
+    graph = get_graph(data)
+    dem = load_demands(data)
+    
+    # Calculate pumping energy for every edge at every time step
+    for e in data["edges"]:
+        supplied_buildings = list_supplied_buildings(data, int(e), graph)
+        for t in range(8760):
+            # Mass flows at current time step
+            m_heat = ( np.sum(dem["heating"][name][t] for name in supplied_buildings) *1e6)/(param["c_f"]*(param["T_heating_supply"][t] - param["T_heating_return"]))
+            m_cool = ( np.sum(dem["cooling"][name][t] for name in supplied_buildings) * 1e6)/( param["c_f"]*(param["T_cooling_return"] - param["T_cooling_supply"]))
+            # Pump energies (MW)
+            pump_energy["heat"][e][t] = prefac * 2 * data["edges"][e]["length"] * m_heat**3/data["edges"][e]["diameter_heating"]**5
+            pump_energy["cool"][e][t] = prefac * 2 * data["edges"][e]["length"] * m_cool**3/data["edges"][e]["diameter_cooling"]**5
+            
+    # sum up pump energy
+    param["pump_energy"] = sum(sum(sum(pump_energy[demand][edge][t] for t in range(8760)) for edge in data["edges"]) for demand in ["heat", "cool"])
+    
+    # pump caps
+    param["pump_cap_heating"] = sum( np.max(pump_energy["heat"][edge]) for edge in data["edges"])
+    param["pump_cap_cooling"] = sum( np.max(pump_energy["cool"][edge]) for edge in data["edges"])    
+            
+    print(param["pump_cap_heating"])
+    print(param["pump_cap_cooling"])    
+        
+        
+        
+    
+    
+    
+    
+    
+    
+    
+    
+    
+
+    
+#    # get supply unit
+#    for n in data["nodes"]:
+#        if data["nodes"][n]["type"] == "supply":
+#            supply_node = int(n) 
+#    
+#    # get path lengths to buildings
+#    dict_lengths = {}
+#    for n in data["nodes"]:
+#        if data["nodes"][n]["type"] == "building":
+#           path = nx.shortest_path(graph, source = supply_node, target = int(n))
+#           path_length = 0
+#           for k in range(len(path)-1):
+#               path_length += np.sqrt((data["nodes"][path[k+1]]["x"]-data["nodes"][path[k]]["x"])**2 + (data["nodes"][path[k+1]]["y"]-data["nodes"][path[k]]["y"])**2)
+#           dict_lengths[data["nodes"][n]["name"]] = path_length
+#           
+#    # Calculate pressure loss on every path at maximum load and find the path with maximum pressure loss and calculate pump capacities
+#    pump_caps = {}
+#    # Size pump for heating and cooling grid
+#    for typ in ["heating", "cooling"]:
+#        pressure_losses = []
+#        for destination in dict_lengths:
+#            max_dem = np.max(dem_buildings[typ][destination])
+#            dp = (max_dem > 0) * ((2*param["dp_pipe"]*dict_lengths[destination])/(1 - param["dp_single"]) +        # pressure loss in pipes
+#                          max_dem * param["dp_substation"])                                                        # pressure drop in substation
+#            pressure_losses.append(dp)
+#        dp_max = max(pressure_losses)
+#      
+#        # find edge at supply unit to get total mass flow through pump
+#        for e in data["edges"]:
+#            n1 = data["edges"][e]["node_ids"][0]
+#            n2 = data["edges"][e]["node_ids"][1]
+#            if data["nodes"][n1]["name"] == "supply" or data["nodes"][n2]["name"] == "supply":
+#                m_flow_pump = data["edges"][e]["max_flow_"+typ]
+#    
+#        cap = m_flow_pump/(param["eta_pump"]*param["rho_f"])*dp_max / 1e6             # MW,   electrical power of pump
+#        pump_caps[typ] = cap
+#        param["pump_cap_"+typ] = cap
         
 #    print(pump_caps)
         

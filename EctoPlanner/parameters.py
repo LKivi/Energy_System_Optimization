@@ -38,6 +38,7 @@ def load_params(use_case, path_file, scenario, dem = None):
                 
         # Fill node-dict
         nodes = {}
+#        for index in range(2):
         for index in range(len(latitudes)):
             nodes[index] = {
                             "number": index,
@@ -151,7 +152,7 @@ def load_params(use_case, path_file, scenario, dem = None):
              
              # Type-day clustering
              "switch_clustering": 1,
-             "n_clusters": 45,                    
+             "n_clusters": 50,                    
              
 
              # Building devices             
@@ -227,10 +228,14 @@ def load_params(use_case, path_file, scenario, dem = None):
     
     param.update(param_temperatures)
     
-    # in case of conventional DHC: set cooling network temperatures (they are needed for CC COP calculation)
+    # in case of conventional DHC: set constant network temperatures
     if not param["switch_bidirectional"]:
-        param["T_hot"] = 12 * np.ones(8760)
-        param["T_cold"] = 6 * np.ones(8760)
+        param["T_supply"] = {}
+        param["T_return"] = {}
+        param["T_supply"]["heat"] = 100
+        param["T_return"]["heat"] = 70
+        param["T_supply"]["cool"] = 6
+        param["T_return"]["cool"] = 12
     
     
     #%% DEEP GROUND TEMPERATURE FOR GEOTHERMAL USE
@@ -277,8 +282,8 @@ def load_params(use_case, path_file, scenario, dem = None):
     
     #%% CO2 EMISSIONS
     
-    param["gas_CO2_emission"] = 0.2         # t_CO2/MWh,    specific CO2 emissions (natural gas)
-    param["grid_CO2_emission"] = 0.503      # t_CO2/MWh,    specific CO2 emissions (grid)
+    param["gas_CO2_emission"] = 0.201       # t_CO2/MWh,    specific CO2 emissions (natural gas)
+    param["grid_CO2_emission"] = 0.516      # t_CO2/MWh,    specific CO2 emissions (grid)
     
     
     #%% PRIMARY ENERGY FACTORS
@@ -291,7 +296,7 @@ def load_params(use_case, path_file, scenario, dem = None):
     
     if param["switch_clustering"]:
         
-        
+        # Get real building peak demands
         for n in nodes:
             nodes[n]["peak"] = {}
             # Get real peak loads
@@ -333,10 +338,12 @@ def load_params(use_case, path_file, scenario, dem = None):
 #            weight[6*n + 1] = 1
         n_nodes = len(nodes)
         weight[6*n_nodes] = 3           # air temperature
-#        weight[6*n_nodes+1] = 1         # solar radiation
-#        weight[6*n_nodes+2] = 3         # price electricity                      
-#        weight[6*n_nodes+5] = 1         # revenue CHP      
-#        weight[6*n_nodes+6] = 1         # revenue PV
+#        weight[6*n_nodes+1] = 1         # soil temperature
+#        weight[6*n_nodes+2] = 1         # solar radiation
+#        weight[6*n_nodes+3] = 3         # price electricity                      
+#        weight[6*n_nodes+7] = 1         # revenue CHP      
+#        weight[6*n_nodes+8] = 1         # revenue PV
+        
 #        # Convert weights to list
         weight = weight.tolist()
             
@@ -430,36 +437,57 @@ def load_params(use_case, path_file, scenario, dem = None):
     param.update(param_pipe)  
     
     param_pipe_eco = {"inv_earth_work": 250,                # EUR/m,           preparation costs for pipe installation
-                       "inv_pipe_PE": 1146.71,              # EUR/(m^2*m),     diameter price for PE pipe without insulation per m pipe length                   
+                       "inv_pipe": 1146.71,              # EUR/(m^2*m),     diameter price for PE pipe without insulation per m pipe length                   
                        "pipe_lifetime": 30,                 # a,               pipe life time (VDI 2067)
-                       "cost_om_pipe": 0.005                #---,              pipe operation and maintetance costs as share of investment (VDI 2067)
+                       "cost_om_pipe": 0.005                # ---,             pipe operation and maintetance costs as share of investment (VDI 2067)
                        }
                 
     param.update(param_pipe_eco)
     
+    if not param["switch_bidirectional"]:
+        param["inv_pipe"] = {}
+        param["inv_pipe"]["heat"] = {}
+        param["inv_pipe"]["heat"]["fix"] = 18.27      # EUR/m
+        param["inv_pipe"]["heat"]["var"] = 2553.44    # EUR/(m^2*m)
+        param["inv_pipe"]["cool"] = {}
+        param["inv_pipe"]["cool"]["fix"] = 0          # EUR/m
+        param["inv_pipe"]["cool"]["var"] = 1146.71    # EUR/(m^2*m)    
+        
+        param["lambda_steel"] = 50               # W(m*K),  steel heat conductivity (set pipes GmbH)
+        param["lambda_ins"] = 0.03               # W/(m*K),  insulation heat conductivity (set pipes GmbH)
+    
     
     # network costs and thermal losses
     if use_case == "FZJ":
-        if scenario in ["Ectogrid_full", "Ectogrid_min"]:
-            param["c_network"] = 27.10
-            param["kA"] = 3.52
+        if scenario == "Ectogrid_min":
+            param["c_network"] = 32.77              # KEUR/a
+            param["kA"] = 3.97                      # kW/K
+        elif scenario == "Ectogrid_full":
+            param["c_network"] = 32.26
+            param["kA"] = 3.96                                 
         elif scenario == "conventional_DHC":
-            param["c_network"] = 27.20
-            param["kA"] = 3.52
+            param["c_network"] = 36.35
+            param["kA"] = {}
+            param["kA"]["cool"] = 3.66
+            param["kA"]["heat"] = 0.29
+            
         else: # stand alone
             param["c_network"] = 0
             param["kA"] = 0
     else:
         param["c_network"] = 0
-        param["kA"] = 0        
-    
+        param["kA"] = 0
+        if scenario == "conventional_DHC":
+            param["kA"] = {}
+            param["kA"]["cool"] = 0
+            param["kA"]["heat"] = 0
     
     #%% PUMP
-    param_pump = { "eta_pump": 0.75,
+    param_pump = { "eta_pump": 0.65,
                    "inv_pump": 500,              # EUR/kW
-                   "price_el_pumps": 50,         # EUR/MWh,    levelized electricity costs for pump supply (should be near to LEC of bidirectional system)
-                   "pump_lifetime": 20,
-                   "cost_om_pump": 0.01
+                   "price_el_pumps": 44,         # EUR/MWh,    levelized electricity costs for pump supply (equals LEC of CHP for 7000 full load hours)
+                   "pump_lifetime": 10,          # a,          pump life time (VDI 2067 Umwälzpumpe)
+                   "cost_om_pump": 0.03
                   }
     param.update(param_pump)
     
@@ -592,7 +620,6 @@ def load_params(use_case, path_file, scenario, dem = None):
                   "life_time": 15,      # a,               operation time (VDI 2067)
                   "cost_om": 0.035,     # ---,             annual operation and maintenance costs as share of investment (VDI 2067)
                   "dT_cond": 5,
-                  "dT_evap": param["T_hot"] - param["T_cold"],
                   "dT_min_cooler": 10,
                   "dT_pinch": 2,
                   "eta_compr": 0.75,     # ---,            isentropic efficiency of compression
@@ -601,10 +628,17 @@ def load_params(use_case, path_file, scenario, dem = None):
                   }
     
     # Temperatures
-    t_c_in = param["T_hot"] + 273.15                            # heat source inlet (equals hot line temperature)
-    dt_c = devs["CC"]["dT_evap"]                                # heat source temperature difference
+    if param["switch_bidirectional"]:
+        t_c_in = param["T_hot"] + 273.15                            # heat source inlet (equals hot line temperature)
+        dt_c = param["T_hot"] - param["T_cold"]
+    else:
+        t_c_in = param["T_return"]["cool"]*np.ones((param["n_clusters"],24)) + 273.15
+        dt_c = param["T_return"]["cool"] - param["T_supply"]["cool"]                                       # heat source temperature difference
+    
     t_h_in = param["t_air"] + devs["CC"]["dT_min_cooler"] + 273.15       # heat sink inlet temperature (equals temperature of cold cooling water)
-    dt_h = devs["CC"]["dT_cond"]                                # cooling water temperature difference
+    dt_h = devs["CC"]["dT_cond"]                                         # cooling water temperature difference
+
+        
     
     
     devs["CC"]["COP"] = calc_COP(devs, param, "CC", [t_c_in, dt_c, t_h_in, dt_h])
@@ -628,7 +662,7 @@ def load_params(use_case, path_file, scenario, dem = None):
     devs["AIRC"] = {
                         "dT_min": 10,
                         "life_time": 20,        # a,        operation time (VDI 2067)
-                        "cost_om": 0.06,       #---,       annual operation and maintenance as share of investment (VDI)
+                        "cost_om": 0.06,        #---,       annual operation and maintenance as share of investment (VDI)
                         "inv_var": 65           # kEUR/MW   investment costs (BMVBS)
                         }    
     
@@ -690,7 +724,7 @@ def load_params(use_case, path_file, scenario, dem = None):
     else:
         for device in ["TES", "CTES"]:
             devs[device]["inv_vol"] = 640      # EUR/m^3
-            devs[device]["V_max"] = 200
+            devs[device]["V_max"] = 100        # m^3
             devs[device]["inv_var"] = devs[device]["inv_vol"] / (param["rho_f"] * param["c_f"] * (devs[device]["T_max"] - devs[device]["T_min"])) * 1000 * 3600      # kEUR/MWh
             devs[device]["max_cap"] = devs[device]["V_max"] * param["rho_f"] * param["c_f"] * (devs[device]["T_max"] - devs[device]["T_min"]) /(1e6 * 3600)
 
@@ -706,7 +740,7 @@ def load_params(use_case, path_file, scenario, dem = None):
                    "sto_loss": 0.001,       # 1/h,              standby losses over one time step
                    "eta_ch": 0.96,          # ---,              charging efficiency      
                    "eta_dch": 0.96,         # ---,              discharging efficiency
-                   "inv_var": 800,          # kEUR/MWh
+                   "inv_var": 1000,          # kEUR/MWh
                    "life_time": 10,         # a,                operation time
                    "cost_om": 0.01,         # ---,              annual operation and maintenance costs as share of investment
                    } 
@@ -1024,7 +1058,6 @@ def calc_annual_investment(devs, devs_dom, param):
         
         # Get device life time
         life_time = devs_dom[device]["life_time"]
-        inv_var = devs_dom[device]["inv_var"]
 
         # Number of required replacements
         n = int(math.floor(observation_time / life_time))
@@ -1037,9 +1070,9 @@ def calc_annual_investment(devs, devs_dom, param):
 
         # Calculate annualized investments       
         if life_time > observation_time:
-            devs_dom[device]["ann_inv_var"] = inv_var * (1 - res_value) * CRF
+            devs_dom[device]["ann_factor"] = (1 - res_value) * CRF
         else: 
-            devs_dom[device]["ann_inv_var"] = inv_var * ( 1 + invest_replacements - res_value) * CRF
+            devs_dom[device]["ann_factor"] = ( 1 + invest_replacements - res_value) * CRF
             
     
     # Distribution devices (pipes, pumps)

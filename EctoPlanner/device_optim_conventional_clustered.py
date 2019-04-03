@@ -34,7 +34,24 @@ def run_optim(obj_fn, obj_eps, eps_constr, nodes, param, devs, devs_dom, dir_res
     for demand in ["heat", "cool"]:
         dem[demand] = sum(nodes[n][demand] for n in nodes) / 1000
         
+    
+    # Add thermal losses
+    dem["heat"] = dem["heat"] + param["kA"]["heat"] * (param["T_supply"]["heat"] + param["T_return"]["heat"] - 2*param["t_soil"])/1000
+    dem["cool"] = dem["cool"] + param["kA"]["cool"] * (2*param["t_soil"] - param["T_supply"]["cool"]- param["T_return"]["cool"])/1000
+#    dem["heat"] = dem["heat"] + param["kA"]["heat"] * (80 - param["t_soil"])/1000
+#    dem["cool"] = dem["cool"] + param["kA"]["cool"] * (param["t_soil"]- 9)/1000
+    
+    for demand in ["heat", "cool"]:
+        for d in days:
+            for t in time_steps:
+                if dem[demand][d][t] < 0:
+                    dem[demand][d][t] = 0
+            
 
+    param["dem_heat"] = dem["heat"]
+    param["dem_cool"] = dem["cool"]
+    
+    
     # Create set for devices
     all_devs = ["BOI", "CHP", "AC", "CC", "SUB"]         # note: building substations are modeled as free coolers
     
@@ -42,7 +59,6 @@ def run_optim(obj_fn, obj_eps, eps_constr, nodes, param, devs, devs_dom, dir_res
     
     # Substation (= heat exchangers) parameters equal free-cooler parameters
     devs["SUB"] = devs_dom["FRC"]
-    devs["SUB"]["ann_factor"] = devs["SUB"]["ann_inv_var"] / devs["SUB"]["inv_var"]
          
     #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     # Setting up the model
@@ -56,11 +72,12 @@ def run_optim(obj_fn, obj_eps, eps_constr, nodes, param, devs, devs_dom, dir_res
     # all variables that are used in post-processing are introduced, even if not needed in this model
     
     # Piece-wise linear function variables
-    lin = {}
-    for device in ["BOI", "CHP", "AC", "CC"]:   
-        lin[device] = {}
-        for i in range(len(devs[device]["cap_i"])):
-            lin[device][i] = model.addVar(vtype="C", name="lin_" + device + "_i" + str(i))
+    if param["switch_cost_functions"]:
+        lin = {}
+        for device in ["BOI", "CHP", "AC", "CC"]:   
+            lin[device] = {}
+            for i in range(len(devs[device]["cap_i"])):
+                lin[device][i] = model.addVar(vtype="C", name="lin_" + device + "_i" + str(i))
             
     # Device's capacity (i.e. nominal power)
     cap = {}
@@ -169,7 +186,7 @@ def run_optim(obj_fn, obj_eps, eps_constr, nodes, param, devs, devs_dom, dir_res
     # Objective functions
     obj = {}
     obj["tac"] = model.addVar(vtype="C", lb=-gp.GRB.INFINITY, name="total_annualized_costs") 
-    obj["co2_gross"] = model.addVar(vtype="C", lb=-gp.GRB.INFINITY, name="total_gross_CO2") 
+    obj["co2_gross"] = model.addVar(vtype="C", lb=-gp.GRB.INFINITY, name="total_CO2") 
       
     #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     # Define objective function
@@ -325,7 +342,7 @@ def run_optim(obj_fn, obj_eps, eps_constr, nodes, param, devs, devs_dom, dir_res
                                   , "sum_up_TAC")                                    
     
     # ANNUAL CO2 EMISSIONS: Implicit emissions by power supply from national grid is penalized, feed-in is ignored
-    model.addConstr(obj["co2_gross"] == gas_total * param["gas_CO2_emission"] + from_grid_total * param["grid_CO2_emission"], "sum_up_gross_CO2_emissions")
+    model.addConstr(obj["co2_gross"] == gas_total * param["gas_CO2_emission"] + (from_grid_total - to_grid_total) * param["grid_CO2_emission"], "sum_up_gross_CO2_emissions")
 
     
     
@@ -374,10 +391,20 @@ def run_optim(obj_fn, obj_eps, eps_constr, nodes, param, devs, devs_dom, dir_res
         print("tac: " + str(obj[obj_fn].X))
         
 
+
+        # Calculate mass flows for network optimization
+        for n in nodes:
+            nodes[n]["mass_flow"] = {}
+            for demand in ["heat", "cool"]:
+                nodes[n]["mass_flow"][demand] = nodes[n][demand] * 1000 / (param["c_f"] * abs((param["T_supply"][demand] - param["T_return"][demand])))     # kg/s
+
+
+
+
         # Store param and nodes as json
         
         # param
-        for item in ["G_sol", "T_cold", "T_hot", "T_soil_deep", "day_matrix", "day_weights", "price_el", "sigma", "t_air"]:
+        for item in ["G_sol", "T_cold", "T_hot", "T_soil_deep", "day_matrix", "day_weights", "price_el", "sigma", "t_air", "t_soil", "dem_heat", "dem_cool"]:
             param[item] = param[item].tolist()
         for item in ["CHP", "PV"]:
             param["revenue_feed_in"][item] = param["revenue_feed_in"][item].tolist()                
@@ -389,38 +416,21 @@ def run_optim(obj_fn, obj_eps, eps_constr, nodes, param, devs, devs_dom, dir_res
         for item in ["T_cooling_return", "T_cooling_supply", "T_heating_return", "T_heating_supply", "cool", "heat"]:
             for n in nodes:
                 nodes[n][item] = nodes[n][item].tolist()
-        for item in ["mass_flow", "power_dem", "res_heat_dem"]:
+        for n in nodes:
+            nodes[n]["mass_flow"]["heat"] = nodes[n]["mass_flow"]["heat"].tolist()
+            nodes[n]["mass_flow"]["cool"] = nodes[n]["mass_flow"]["cool"].tolist()
+        for item in ["power_dem", "res_heat_dem"]:
             for n in nodes:
                 nodes[n][item] = [0]                
         with open(dir_results + "\data_nodes.json", "w") as outfile:
             json.dump(nodes, outfile, indent=4, sort_keys=True)         
         
-        
-        # add keys which are retrieved in post-processing
 
 
-
-        # Run Post Processing
+#        # Run Post Processing
         if param["switch_post_processing"]:
             post.run(dir_results)
     
-        
-        # Print real investment costs per MW
-        # ( To Check if input costs (line 48 ff.) are reasonable )
-        for device in ["BOI", "CHP", "AC", "CC"]:
-            if cap[device].X > 0:
-                # Calculate investment costs according to piece-wise linear funcitons
-                for i in range(len(devs[device]["cap_i"])):
-                    if devs[device]["cap_i"][i] >= cap[device].X:
-                        # Get supporting points for linear interpolation
-                        cap_top = devs[device]["cap_i"][i]
-                        cap_bot = devs[device]["cap_i"][i-1]
-                        inv_top = devs[device]["inv_i"][i]
-                        inv_bot = devs[device]["inv_i"][i-1]
-                        break
-                # Calculate real variable investment
-                inv_var_real = (inv_bot + (cap[device].X - cap_bot) / (cap_top - cap_bot) * (inv_top - inv_bot)) / cap[device].X                       
-                print(device + ": " + str(round(inv_var_real,2)))
                 
         
     

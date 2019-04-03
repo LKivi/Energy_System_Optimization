@@ -34,7 +34,8 @@ all_sol = []
 
 # Calculate anchor point for first objective function
 # 1.) Single-objective optimization for first objective function
-opt_res = run_optim(obj_1, "", "", str(dir_results + "\\single_objective_" + obj_1))
+#opt_res = run_optim(obj_1, "", "", str(dir_results + "\\single_objective_" + obj_1))
+(devs,param,dem) = run_optim(obj_1, "", "", str(dir_results + "\\single_objective_" + obj_1))
 
 # 2.) Single-objective optimization for second objective function, in which the first objective function is bounded to its optimum from the previous optimization
 #anchor_point_1 = run_optim(obj_2, obj_1, opt_res[obj_1], str(dir_results + "\\anchor_point_" + obj_1))

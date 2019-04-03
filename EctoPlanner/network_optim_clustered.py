@@ -34,6 +34,16 @@ def run_optim(nodes, param, dir_results):
     #%% STEP ONE: FIND NETWORK WITH MINIMUM TOTAL PIPE LENGTH (MINIMUM SPANNING TREE)
   
     dir_topo = dir_network + "\\topology"
+
+    # get node positions
+    shift = 50
+    for n in nodes:
+        nodes[n]["x"] += shift
+        nodes[n]["y"] += shift
+        
+    pos = {}
+    for k in node_list:
+        pos[k] = (nodes[k]["x"], nodes[k]["y"])
     
     # Create networkx-graph
     weighted_graph = nx.Graph()
@@ -47,13 +57,45 @@ def run_optim(nodes, param, dir_results):
         ebunch_weighted.append((e[0], e[1], edge_lengths[edge_dict[e]]))
     weighted_graph.add_weighted_edges_from(ebunch_weighted)
     
+    fig = plt.figure()
+    ax = fig.add_subplot(1,1,1)
+    ax.set_xlabel("x [m]", fontsize = 12, fontweight = "bold")
+    ax.set_ylabel("y [m]", fontsize = 12, fontweight = "bold")
+    ax.set_xlim(0,500)
+    ax.set_ylim(0,400)
+    xticks =np.arange(0,600,100)
+    yticks =np.arange(0,500,100)
+    plt.xticks(xticks)
+    plt.yticks(yticks)
+    xlabels = ["{:2d}".format(x) for x in xticks]
+    ylabels = ["{:2d}".format(x) for x in yticks]
+    ax.set_xticklabels(xlabels, fontsize = 12)
+    ax.set_yticklabels(ylabels, fontsize = 12)
+
+    ax.set_axisbelow(True)
+    plt.grid(color = "grey") 
+    
+    # plot all edges
+    for n in nodes:
+        ax.scatter(nodes[n]["x"], nodes[n]["y"], c = "black", s = 20, zorder = 100)# edgecolors = "black")
+    nx.draw_networkx(weighted_graph, pos, ax, with_labels = False, font_weight="bold", node_size = 0, width = 0.35, edge_color = "lightgrey", zorder = 10)
+    
+    ax.text(nodes[10]["x"]+3, nodes[10]["y"]+2, "1", fontsize = 12)
+    ax.text(nodes[0]["x"]+5, nodes[0]["y"], "2", fontsize = 12)
+    ax.text(nodes[1]["x"]+3, nodes[1]["y"]+2, "3", fontsize = 12)
+    ax.text(nodes[2]["x"]+5, nodes[2]["y"]-4, "4", fontsize = 12)
     
      # find network with minimal length   
     network = nx.minimum_spanning_tree(weighted_graph)
+    nx.draw_networkx(network, pos, ax, with_labels = False, font_weight="bold", node_size = 0, edge_color = "red", width = 2, zorder = 50)    
     
     # Close network to ring network
     print("Achtung!! Hier wird das Netzwerk manuell zu einem Ringnetzwerk geschlossen. Bei einem anderen Use-Case muss die Stelle angepasst werden!")
-    network.add_edge(0,16)
+    network.add_edge(1,15)
+    network.add_edge(5,7)
+    nx.draw_networkx_edges(network, pos, edgelist = [(0,16), (4,6)], width = 2, edge_color = "red", style = "dashed", zorder = 50)
+
+
     
     
      
@@ -66,10 +108,7 @@ def run_optim(nodes, param, dir_results):
 #        print("Pipe " + str(edge_dict_rev[edge_dict[e]][0]) + "-" + str(edge_dict_rev[edge_dict[e]][1]) + ": " + str(edge_lengths[edge_dict[e]]) + " m." )
     
     
-    # get node positions
-    pos = {}
-    for k in node_list:
-        pos[k] = (nodes[k]["x"], nodes[k]["y"])
+
    
 
     # Plot Network
@@ -340,8 +379,8 @@ def run_optim(nodes, param, dir_results):
         model.addConstr(diam[p] <= dict_pipes["d_max"][p])
     
     # pipe investment costs
-    model.addConstr(inv["pipes"] >= sum((param["inv_earth_work"] + 2 * param["inv_pipe_PE"] * diam[p] * diam[p]) * edge_lengths[p] for p in pipes), name = "Q1")
-#    model.addConstr(inv_pipes <= sum((0.5*param["inv_earth_work"] + param["inv_pipe_PE"] * d_in[p] * d_in[p]) * 2*edge_lengths[p] for p in pipes), name = "Q2")
+    model.addConstr(inv["pipes"] >= sum((param["inv_earth_work"] + 2 * param["inv_pipe"] * diam[p] * diam[p]) * edge_lengths[p] for p in pipes), name = "Q1")
+#    model.addConstr(inv_pipes <= sum((0.5*param["inv_earth_work"] + param["inv_pipe"] * d_in[p] * d_in[p]) * 2*edge_lengths[p] for p in pipes), name = "Q2")
     
     # annualized pipe costs
     model.addConstr(tac["pipes"] == inv["pipes"] * (param["ann_factor_pipe"] + param["cost_om_pipe"]))
@@ -417,7 +456,7 @@ def run_optim(nodes, param, dir_results):
     pipes_norm = {}
         
     # available inner pipe diameters for the network    
-    path = "input_data/pipes_diameters.txt"
+    path = "input_data/pipes_PE.txt"
     diameters = np.loadtxt(open(path, "rb"), delimiter = ",", usecols=(0)) - 2 * np.loadtxt(open(path, "rb"), delimiter = ",", usecols=(1))      # inner diameters = outer diameters - 2 * wall thickness
     
     for p in pipes:
@@ -450,13 +489,18 @@ def run_optim(nodes, param, dir_results):
     for p in pipes:
         print("Pipe " + str(edge_dict_rev[p][0]) + "-" + str(edge_dict_rev[p][1]) + ": " + str(round(pipes_norm[p]["diameter"]*1000,2)) + " mm.")
         
+        
+    # weighted mean pipe diameter
+    diam_mean = np.sum(pipes_norm[p]["diameter"]*pipes_norm[p]["length"] for p in pipes)/np.sum(pipes_norm[p]["length"] for p in pipes)
+    print("Mean pipe diameter weighted by pipe lengths: " + str(round(diam_mean*1000,2)) + " mm.")
+        
    
     
     #%% RECALCULATE NETWORK TAC USING NORM PIPE DIAMETERS
     
     
     # Recalculate pipe costs with norm diameters
-    inv_pipes_norm = sum((param["inv_earth_work"] + 2 * param["inv_pipe_PE"] * pipes_norm[p]["diameter"]**2) * edge_lengths[p] for p in pipes)
+    inv_pipes_norm = sum((param["inv_earth_work"] + 2 * param["inv_pipe"] * pipes_norm[p]["diameter"]**2) * edge_lengths[p] for p in pipes)
     tac_pipes_norm = inv_pipes_norm * (param["ann_factor_pipe"] + param["cost_om_pipe"])
     
     # Calculate exact pump costs with norm diameters

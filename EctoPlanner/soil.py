@@ -6,7 +6,7 @@ Created on Wed Oct 10 16:13:13 2018
 """
 
 import numpy as np
-#from scipy.optimize import leastsq
+import scipy.optimize as opt
 import cmath
 
 
@@ -19,12 +19,24 @@ def calculate_thermal_losses(param, pipe_data):
     
 #    T_soil = calculate_soil_temperature(param)
     T_soil = np.array(param["t_soil"])
+#    # Cluster time series of soil temperature
+#    T_soil_clustered = np.zeros((param["n_clusters"], 24))
+#    # get List of days used as type-days
+#    z = np.array(param["day_matrix"])
+#    typedays = []
+#    for d in range(365):
+#        if any(z[d]):
+#            typedays.append(d)
+#    for d in range(param["n_clusters"]):
+#        for t in range(24):
+#            T_soil_clustered[d][t] = T_soil[24*typedays[d]+t]
+#    T_soil = T_soil_clustered
     
     losses = {}
     losses["heat"] = np.zeros((param["n_clusters"], 24))
     losses["cool"] = np.zeros((param["n_clusters"], 24))      
     
-    path = "input_data/pipes_diameters.txt"
+    path = "input_data/pipes_PE.txt"
     # available inner pipe diameters
     diameters = np.loadtxt(open(path, "rb"), delimiter = ",", usecols=(0)) - 2 * np.loadtxt(open(path, "rb"), delimiter = ",", usecols=(1))
     # available pipe wall thicknesses
@@ -88,9 +100,9 @@ def calculate_soil_temperature(param):
     
     
     # Cosinus Fit of G, T_air and T_sky: X = mean - amp * cos(omega*t - phase)
-    G_mean, G_amp, G_phase = cosFit(weather["G"])
-    Tair_mean, Tair_amp, Tair_phase = cosFit(weather["T_air"])
-    Tsky_mean, Tsky_amp, Tsky_phase = cosFit(weather["T_sky"])
+    G_mean, G_amp, G_phase = soil.cosFit(weather["G"])
+    Tair_mean, Tair_amp, Tair_phase = soil.cosFit(weather["T_air"])
+    Tsky_mean, Tsky_amp, Tsky_phase = soil.cosFit(weather["T_sky"])
     
 #    print(G_mean)
 #    print(G_amp)
@@ -194,7 +206,7 @@ def cosFit(data):
     start_phase = 0
     
     func = lambda x: x[0] - x[1]*np.cos(omega*time-x[2]) - data
-    mean, amp, phase = leastsq(func, [start_mean, start_amp, start_phase])[0]
+    mean, amp, phase = opt.leastsq(func, [start_mean, start_amp, start_phase])[0]
     
     #data_fit = mean - amp*np.cos(omega*time - phase)
     #plt.plot(time, data, '.')

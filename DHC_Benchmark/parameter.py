@@ -40,11 +40,11 @@ def load_params():
     
     #%% SWITCHES
     
-    param_switches = {"switch_low_temp": 1,             # 1: low-temperature heating 0: heating temperature according to real data from FZ Jülich
+    param_switches = {"switch_low_temp": 0,             # 1: low-temperature heating 0: heating temperature according to real data from FZ Jülich
                       "switch_n_1": 0,                  # consider n-1 redundancy of heating and cooling generation
-                      "switch_hp": 1,                    # consider heat pump between cooling and heating return pipes?
+                      "switch_hp": 0,                    # consider heat pump between cooling and heating return pipes?
                       "switch_transient_hp": 0,          # consider variable heat pump outlet temperature
-                      "switch_pump": 0                   # consider pumping costs
+                      "switch_pump": 1                   # consider pumping costs
                       }
     
     param.update(param_switches)
@@ -80,7 +80,7 @@ def load_params():
                   "lambda_steel": 50,               # W(m*K),  steel heat conductivity (set pipes GmbH)
                   "R_0": 0.0685,                    # m^2*K/W, pipe surface correction for thermal resitance (see DIN EN 13941)   
                   "f_fric": 0.025,                  # ---,     pipe friction factor
-                  "dp_pipe": 150,                   # Pa/m,    nominal pipe pressure gradient
+                  "dp_pipe": 200,                   # Pa/m,    nominal pipe pressure gradient
                   "c_f": 4180,                      # J/(kg*K),fluid specific heat capacity
                   "rho_f": 1000,                    # kg/m^3,  fluid density
 #                  "t_soil": 0.6,                   # m,       thickness of soil layer around the pipe to calculate heat transfer into ground
@@ -105,11 +105,11 @@ def load_params():
     
     #%% PUMP PARAMETERS
     
-    param_pump ={ "eta_pump": 0.7,                  # ---,        pump electrical efficiency
+    param_pump ={ "eta_pump": 0.65,                  # ---,        pump electrical efficiency
                   "inv_pump": 500,                  # kEUR/MW,    pump investment costs
                   "pump_lifetime": 10,              # a,          pump life time (VDI 2067)
                   "cost_om_pump": 0.03,             # ---,        pump operation and maintenance costs (VDI 2067)
-                  "pump_electricity_costs": 0.05    # kEUR/MWh    pump electricity costs (equals representative CHP power generation costs)
+                  "pump_electricity_costs": 0.044    # kEUR/MWh    pump electricity costs (equals representative CHP power generation costs)
                  }
     
     param.update(param_pump)
@@ -183,10 +183,10 @@ def load_params():
     
     param = grid.design_pump(grid_data, param, dem_buildings)
 
-    # Electrical energy for pumping
-    param["pump_energy"] = (param["load_factor_heating"] * param["pump_cap_heating"] + param["load_factor_cooling"] * param["pump_cap_cooling"])* 8760      # MWh, electrical pump energy
-    
-#    print(param["pump_energy"])
+#    # Electrical energy for pumping
+#    param["pump_energy"] = (param["load_factor_heating"] * param["pump_cap_heating"] + param["load_factor_cooling"] * param["pump_cap_cooling"])* 8760      # MWh, electrical pump energy
+#    
+    print(param["pump_energy"])
  
     
 #%% THERMAL LOSSES
@@ -194,7 +194,10 @@ def load_params():
     # calculate heating and cooling losses of the grid
     losses = soil.calculateLosses(param, grid_data)
     
-    print(sum(losses["cooling_grid"][t] for t in range(8760)))
+    param["heat_losses"] = losses["heating_grid"]
+    param["cool_losses"] = losses["cooling_grid"]
+    
+#    print(sum(losses["cooling_grid"][t] for t in range(8760)))
           
     # Add losses to building demands to get total grid demand
     dem["heat"] = dem["heat"] + losses["heating_grid"]
@@ -665,7 +668,7 @@ def calc_annual_investment(devs, param, grid_data, dem_buildings):
     param["tac_distr"] = param["tac_pipes"] + param["tac_subs"]  + param["tac_pump"]
     
     
-#    print(param["tac_distr"])
+    print(param["tac_distr"])
                                                                            
 
     return devs, param

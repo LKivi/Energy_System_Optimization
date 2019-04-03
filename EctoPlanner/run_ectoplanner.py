@@ -24,10 +24,10 @@ use_case = "FZJ"
 
 # Choose scenario
  
-#scenario = "stand_alone"                     # stand-alone supply
+scenario = "stand_alone"                     # stand-alone supply
 #scenario = "conventional_DHC"                # conventional, separated heating and cooling network
 #scenario = "Ectogrid_min"                    # bidirectional network with conventional BU devices and minumum building equipment
-scenario = "Ectogrid_full"                   # bidirectional network with full BU & building equipment
+#scenario = "Ectogrid_full"                   # bidirectional network with full BU & building equipment
 
 
 
@@ -61,7 +61,7 @@ nodes, param = device_optim.run(nodes, param, devs, devs_dom, dir_results)
 
     
            
-# Optimize network topology
+# Run network optimization
 #param = network.design_network(nodes, param, dir_results)
 
 
